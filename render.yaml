@@ -9,9 +9,11 @@ services:
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///./merchantflow.db
       - key: RAZORPAY_KEY_ID
-        value: rzp_test_placeholder
+        sync: false
       - key: RAZORPAY_KEY_SECRET
-        value: placeholder_secret
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://merchantflow-frontend.onrender.com,http://localhost:3000
 
   - type: web
     name: merchantflow-frontend

@@ -1,0 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+
+:root {
+  --background: #070b14;
+  --foreground: #e8eaf0;
+  --card: #0d1525;
+  --primary: #00d4a8;
+  --primary-foreground: #070b14;
+  --border: rgba(255,255,255,0.08);
+  --radius: 6px;
+}
+
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
+
+body {
+  font-family: 'Instrument Sans', sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-serif { font-family: 'DM Serif Display', serif; }
+.font-mono-data { font-family: 'JetBrains Mono', monospace; }

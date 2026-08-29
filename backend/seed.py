@@ -5,30 +5,48 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from models.database import engine, Base, async_session
 from models.models import Merchant, Product, ProductRelationship, Policy
-import uuid
+from sqlalchemy import select
 
 async def seed():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
     async with async_session() as db:
-        merchant = Merchant(
-            id="merchant_001",
-            name="TechZone Electronics",
-            email="admin@techzone.in"
-        )
-        db.add(merchant)
-        
-        policy = Policy(
-            merchant_id="merchant_001",
-            max_transaction_amount=3000,
-            max_discount_percentage=10,
-            payment_requires_approval=True,
-            max_retry_attempts=1
-        )
-        db.add(policy)
-        
-        products = [
+        existing_merchant = await db.get(Merchant, "merchant_001")
+        if existing_merchant is None:
+            merchant = Merchant(
+                id="merchant_001",
+                name="TechZone Electronics",
+                email="admin@techzone.in"
+            )
+            db.add(merchant)
+            policy = Policy(
+                merchant_id="merchant_001",
+                max_transaction_amount=3000,
+                max_discount_percentage=10,
+                payment_requires_approval=True,
+                max_retry_attempts=1
+            )
+            db.add(policy)
+        else:
+            existing_policy = (await db.execute(
+                select(Policy).where(Policy.merchant_id == "merchant_001")
+            )).scalar_one_or_none()
+            if existing_policy is None:
+                db.add(Policy(
+                    merchant_id="merchant_001",
+                    max_transaction_amount=3000,
+                    max_discount_percentage=10,
+                    payment_requires_approval=True,
+                    max_retry_attempts=1
+                ))
+
+        existing_product_count = (await db.execute(
+            select(Product.id).where(Product.merchant_id == "merchant_001")
+        )).scalars().all()
+
+        if not existing_product_count:
+            products = [
             Product(id="prod_001", merchant_id="merchant_001", name="Wireless Bluetooth Headphones", description="Premium noise-cancelling wireless headphones with 30-hour battery life", category="Audio", price=2499, stock=50),
             Product(id="prod_002", merchant_id="merchant_001", name="Headphone Carrying Case", description="Hard shell protective case for headphones", category="Audio Accessories", price=199, stock=100),
             Product(id="prod_003", merchant_id="merchant_001", name="USB-C to 3.5mm Adapter", description="High-quality audio adapter for devices without headphone jack", category="Audio Accessories", price=299, stock=75),
@@ -61,36 +79,36 @@ async def seed():
             Product(id="prod_030", merchant_id="merchant_001", name="Cable Management Kit", description="Velcro ties and cable clips for desk organization", category="Office Products", price=299, stock=150),
         ]
         
-        for p in products:
-            db.add(p)
-        
-        relationships = [
-            ProductRelationship(product_id="prod_001", related_product_id="prod_002", relationship_type="cross-sell", reason="Protective case for your headphones"),
-            ProductRelationship(product_id="prod_001", related_product_id="prod_003", relationship_type="complementary", reason="Connect to devices without headphone jack"),
-            ProductRelationship(product_id="prod_004", related_product_id="prod_005", relationship_type="cross-sell", reason="Perfect surface for your gaming mouse"),
-            ProductRelationship(product_id="prod_006", related_product_id="prod_004", relationship_type="upsell", reason="Complete your desktop setup"),
-            ProductRelationship(product_id="prod_006", related_product_id="prod_007", relationship_type="complementary", reason="Ergonomic viewing for your laptop"),
-            ProductRelationship(product_id="prod_008", related_product_id="prod_004", relationship_type="cross-sell", reason="Wireless keyboard pairs with wireless mouse"),
-            ProductRelationship(product_id="prod_011", related_product_id="prod_012", relationship_type="cross-sell", reason="Complete phone protection"),
-            ProductRelationship(product_id="prod_012", related_product_id="prod_013", relationship_type="complementary", reason="Charge your phone while protected"),
-            ProductRelationship(product_id="prod_013", related_product_id="prod_015", relationship_type="upsell", reason="Charge on the go"),
-            ProductRelationship(product_id="prod_016", related_product_id="prod_019", relationship_type="cross-sell", reason="Organize your desk with proper lighting"),
-            ProductRelationship(product_id="prod_010", related_product_id="prod_020", relationship_type="cross-sell", reason="Better lighting for video calls"),
-            ProductRelationship(product_id="prod_021", related_product_id="prod_022", relationship_type="cross-sell", reason="Mount your speaker for better sound"),
-            ProductRelationship(product_id="prod_023", related_product_id="prod_024", relationship_type="complementary", reason="Additional portable storage"),
-            ProductRelationship(product_id="prod_009", related_product_id="prod_025", relationship_type="complementary", reason="Connect external displays"),
-            ProductRelationship(product_id="prod_027", related_product_id="prod_028", relationship_type="cross-sell", reason="Replace or upgrade ear tips"),
-            ProductRelationship(product_id="prod_029", related_product_id="prod_007", relationship_type="complementary", reason="Complete laptop cooling setup"),
-            ProductRelationship(product_id="prod_016", related_product_id="prod_020", relationship_type="complementary", reason="Lighting for video calls and desk work"),
-            ProductRelationship(product_id="prod_030", related_product_id="prod_019", relationship_type="cross-sell", reason="Complete desk organization"),
-            ProductRelationship(product_id="prod_018", related_product_id="prod_007", relationship_type="cross-sell", reason="Alternative ergonomic viewing option"),
-        ]
-        
-        for r in relationships:
-            db.add(r)
+            for p in products:
+                db.add(p)
+            
+            relationships = [
+                ProductRelationship(product_id="prod_001", related_product_id="prod_002", relationship_type="cross-sell", reason="Protective case for your headphones"),
+                ProductRelationship(product_id="prod_001", related_product_id="prod_003", relationship_type="complementary", reason="Connect to devices without headphone jack"),
+                ProductRelationship(product_id="prod_004", related_product_id="prod_005", relationship_type="cross-sell", reason="Perfect surface for your gaming mouse"),
+                ProductRelationship(product_id="prod_006", related_product_id="prod_004", relationship_type="upsell", reason="Complete your desktop setup"),
+                ProductRelationship(product_id="prod_006", related_product_id="prod_007", relationship_type="complementary", reason="Ergonomic viewing for your laptop"),
+                ProductRelationship(product_id="prod_008", related_product_id="prod_004", relationship_type="cross-sell", reason="Wireless keyboard pairs with wireless mouse"),
+                ProductRelationship(product_id="prod_011", related_product_id="prod_012", relationship_type="cross-sell", reason="Complete phone protection"),
+                ProductRelationship(product_id="prod_012", related_product_id="prod_013", relationship_type="complementary", reason="Charge your phone while protected"),
+                ProductRelationship(product_id="prod_013", related_product_id="prod_015", relationship_type="upsell", reason="Charge on the go"),
+                ProductRelationship(product_id="prod_016", related_product_id="prod_019", relationship_type="cross-sell", reason="Organize your desk with proper lighting"),
+                ProductRelationship(product_id="prod_010", related_product_id="prod_020", relationship_type="cross-sell", reason="Better lighting for video calls"),
+                ProductRelationship(product_id="prod_021", related_product_id="prod_022", relationship_type="cross-sell", reason="Mount your speaker for better sound"),
+                ProductRelationship(product_id="prod_023", related_product_id="prod_024", relationship_type="complementary", reason="Additional portable storage"),
+                ProductRelationship(product_id="prod_009", related_product_id="prod_025", relationship_type="complementary", reason="Connect external displays"),
+                ProductRelationship(product_id="prod_027", related_product_id="prod_028", relationship_type="cross-sell", reason="Replace or upgrade ear tips"),
+                ProductRelationship(product_id="prod_029", related_product_id="prod_007", relationship_type="complementary", reason="Complete laptop cooling setup"),
+                ProductRelationship(product_id="prod_016", related_product_id="prod_020", relationship_type="complementary", reason="Lighting for video calls and desk work"),
+                ProductRelationship(product_id="prod_030", related_product_id="prod_019", relationship_type="cross-sell", reason="Complete desk organization"),
+                ProductRelationship(product_id="prod_018", related_product_id="prod_007", relationship_type="cross-sell", reason="Alternative ergonomic viewing option"),
+            ]
+            
+            for r in relationships:
+                db.add(r)
         
         await db.commit()
-        print("Seed data created successfully!")
+        print("Seed data checked successfully!")
 
 if __name__ == "__main__":
     asyncio.run(seed())

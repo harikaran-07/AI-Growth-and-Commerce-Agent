@@ -38,7 +38,7 @@ export default function ProductsPage() {
     }
   }
 
-  const categories = [...new Set(products.map(p => p.category))]
+  const categories = Array.from(new Set(products.map((p) => p.category)))
 
   return (
     <div className="p-8">

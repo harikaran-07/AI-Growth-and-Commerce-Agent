@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+frontend/node_modules/
+backend/venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env.local
+.env*
+
+# build output
+.next/
+frontend/.next/
+out/
+dist/
+
+# OS/editor
+.DS_Store
+.vscode/

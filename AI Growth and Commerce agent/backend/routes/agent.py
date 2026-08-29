@@ -43,6 +43,7 @@ class PolicyCheckResponse(BaseModel):
 
 class ApprovalResponse(BaseModel):
     approval_id: str
+    order_id: str
     token: str
     status: str
     message: str
@@ -222,6 +223,7 @@ async def request_approval(request: PaymentRequest, db: AsyncSession = Depends(g
     
     return ApprovalResponse(
         approval_id=approval.id,
+        order_id=order.id,
         token=token,
         status="pending",
         message=f"Payment approval requested for ₹{cart.total}"

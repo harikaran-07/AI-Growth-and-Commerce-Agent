@@ -23,10 +23,10 @@ class AuditLogResponse(BaseModel):
     final_status: Optional[str]
     created_at: datetime
 
-@router.get("/{session_id}", response_model=List[AuditLogResponse])
-async def get_audit_logs(session_id: str, db: AsyncSession = Depends(get_db)):
+@router.get("/", response_model=List[AuditLogResponse])
+async def get_all_audit_logs(limit: int = 100, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(AuditLog).where(AuditLog.session_id == session_id).order_by(AuditLog.created_at)
+        select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
     )
     logs = result.scalars().all()
     return [
@@ -46,10 +46,10 @@ async def get_audit_logs(session_id: str, db: AsyncSession = Depends(get_db)):
         ) for log in logs
     ]
 
-@router.get("/", response_model=List[AuditLogResponse])
-async def get_all_audit_logs(limit: int = 100, db: AsyncSession = Depends(get_db)):
+@router.get("/{session_id}", response_model=List[AuditLogResponse])
+async def get_audit_logs(session_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+        select(AuditLog).where(AuditLog.session_id == session_id).order_by(AuditLog.created_at)
     )
     logs = result.scalars().all()
     return [

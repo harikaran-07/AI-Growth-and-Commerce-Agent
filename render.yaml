@@ -2,7 +2,7 @@ services:
   - type: web
     name: merchantflow-backend
     env: python
-    rootDir: backend
+    rootDir: AI Growth and Commerce agent/backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -16,7 +16,7 @@ services:
   - type: web
     name: merchantflow-frontend
     env: node
-    rootDir: frontend
+    rootDir: AI Growth and Commerce agent/frontend
     buildCommand: npm install && npm run build
     startCommand: npm run start -- --port $PORT
     envVars:

@@ -4,7 +4,7 @@ from sqlalchemy import select
 from models.database import get_db
 from models.models import Payment, Order
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 import os
 import razorpay
 import uuid
@@ -29,6 +29,25 @@ class PaymentResponse(BaseModel):
 
 def get_razorpay_client():
     return razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
+@router.get("/", response_model=List[PaymentResponse])
+async def get_all_payments(limit: int = 100, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Payment).order_by(Payment.created_at.desc()).limit(limit)
+    )
+    payments = result.scalars().all()
+    return [
+        PaymentResponse(
+            id=p.id,
+            order_id=p.order_id,
+            amount=p.amount,
+            currency=p.currency,
+            status=p.status,
+            razorpay_order_id=p.razorpay_order_id,
+            razorpay_payment_id=p.razorpay_payment_id,
+            failure_reason=p.failure_reason
+        ) for p in payments
+    ]
 
 @router.post("/", response_model=PaymentResponse)
 async def create_payment(payment: PaymentCreate, db: AsyncSession = Depends(get_db)):

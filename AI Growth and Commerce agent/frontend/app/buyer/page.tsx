@@ -39,6 +39,8 @@ export default function BuyerPage() {
   const [sessionId] = useState(() => `session_${Date.now()}`)
   const [cartId, setCartId] = useState<string | null>(null)
   const [cartTotal, setCartTotal] = useState(0)
+  const [approvalId, setApprovalId] = useState<string | null>(null)
+  const [orderId, setOrderId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -126,6 +128,7 @@ export default function BuyerPage() {
 
       setCartId(data.cart_id)
       setCartTotal(data.total)
+      localStorage.setItem('cartId', data.cart_id)
 
       const cartMessage: Message = {
         id: `msg_${Date.now()}`,
@@ -154,6 +157,9 @@ export default function BuyerPage() {
       })
       const data = await res.json()
 
+      setApprovalId(data.approval_id)
+      setOrderId(data.order_id)
+
       const approvalMessage: Message = {
         id: `msg_${Date.now()}`,
         role: 'assistant',
@@ -167,15 +173,17 @@ export default function BuyerPage() {
   }
 
   const handleApprove = async () => {
+    if (!approvalId || !orderId) return
+
     try {
-      const approvalRes = await fetch(`/api/agent/approve/${messages.find(m => m.approvalPending)?.id || ''}`, {
+      const approvalRes = await fetch(`/api/agent/approve/${approvalId}`, {
         method: 'POST'
       })
 
       const paymentRes = await fetch('/api/payments/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: cartId })
+        body: JSON.stringify({ order_id: orderId })
       })
       const paymentData = await paymentRes.json()
 

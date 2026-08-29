@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from models.database import engine, Base, init_db
 from routes import products, carts, payments, agent, audit, analytics, policies, approvals, webhooks
+import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,9 +17,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

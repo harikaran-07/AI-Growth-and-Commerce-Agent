@@ -252,13 +252,10 @@ async def _call_gemini_chat(api_key: str, messages: List[Dict[str, Any]],
         if not user_msg:
             user_msg = "Hello"
 
-        # Use SYNC Chat API in a thread to avoid blocking the event loop.
-        # AFC handles the full tool loop + thought_signatures automatically.
-        def _sync_call():
-            sync_chat = client.chats.create(model=model, config=config)
-            return sync_chat.send_message(user_msg)
-
-        response = await asyncio.to_thread(_sync_call)
+        # Use SYNC Chat API directly (not in thread).
+        # Tool functions are sync and use background event loop bridge.
+        sync_chat = client.chats.create(model=model, config=config)
+        response = sync_chat.send_message(user_msg)
 
         # Parse response
         text = response.text if response.text else None

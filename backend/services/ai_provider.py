@@ -1,18 +1,15 @@
 """
 AI Provider - Google Gemini Integration
-Uses Google GenAI SYNC Chat API with automatic function calling (AFC).
-AFC handles thought_signatures automatically - no manual Part recreation needed.
-Functions must have typed parameters with NO default values for AFC to work.
-Tools are sync functions that bridge to async via background event loop.
+Uses the Gemini REST API directly via httpx for full control over
+thought_signatures (required by Gemini 3.x models for function calling).
 Falls back to a simple intent parser when no API key is configured.
 """
 
 import os
 import json
 import logging
-import asyncio
-import threading
 from typing import Any, Dict, List, Optional
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -23,41 +20,6 @@ except ImportError:
     genai = None
     types = None
 
-# Background event loop for sync->async bridging
-_bg_loop = None
-_bg_lock = threading.Lock()
-
-
-def _get_bg_loop():
-    global _bg_loop
-    if _bg_loop is None or _bg_loop.is_closed():
-        with _bg_lock:
-            if _bg_loop is None or _bg_loop.is_closed():
-                _bg_loop = asyncio.new_event_loop()
-                threading.Thread(target=_bg_loop.run_forever, daemon=True).start()
-    return _bg_loop
-
-
-# Shared state for tool functions
-_tool_calls_log: List[Dict[str, Any]] = []
-_current_context: Dict[str, Any] = {}
-
-
-def set_context(db=None, session_id: str = "default"):
-    """Set the current execution context for tool functions."""
-    _current_context["db"] = db
-    _current_context["session_id"] = session_id
-
-
-def get_tool_calls_log() -> List[Dict[str, Any]]:
-    """Get the list of tool calls made during the last LLM interaction."""
-    return _tool_calls_log.copy()
-
-
-def clear_tool_calls_log():
-    """Clear the tool calls log."""
-    _tool_calls_log.clear()
-
 
 def _get_api_key():
     return os.getenv("GEMINI_API_KEY", os.getenv("AI_API_KEY", ""))
@@ -66,6 +28,8 @@ def _get_api_key():
 def _get_model():
     return os.getenv("GEMINI_MODEL", os.getenv("AI_MODEL", "gemini-3.5-flash-lite"))
 
+
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 AGENT_SYSTEM_PROMPT = """You are MerchantFlow AI, a helpful shopping assistant for TechZone Electronics.
 
@@ -88,111 +52,108 @@ STRICT RULES:
 
 You are a merchant shopping assistant. Behave professionally and helpfully."""
 
-
-def _execute_tool_sync(tool_name: str, arguments: dict) -> str:
-    """Synchronous tool executor that bridges to async execute_tool."""
-    from services.agent_tools import execute_tool
-    db = _current_context.get("db")
-    session_id = _current_context.get("session_id", "default")
-
-    async def _run():
-        return await execute_tool(tool_name, arguments, db, session_id)
-
-    loop = _get_bg_loop()
-    future = asyncio.run_coroutine_threadsafe(_run(), loop)
-    try:
-        result = future.result(timeout=30)
-        return result
-    except Exception as e:
-        logger.error(f"Tool {tool_name} failed: {e}")
-        return json.dumps({"error": f"Tool execution failed: {str(e)}"})
-
-
-def _log_and_execute(tool_name: str, **kwargs) -> str:
-    """Log the tool call and execute it synchronously."""
-    _tool_calls_log.append({"name": tool_name, "arguments": kwargs})
-    return _execute_tool_sync(tool_name, kwargs)
-
-
-# AFC-compatible tool functions: typed params, NO defaults
-def search_products(query: str, category: str, max_price: float, min_price: float, in_stock: bool) -> str:
-    """Search the merchant product catalog for products matching criteria."""
-    kwargs = {}
-    if query: kwargs["query"] = query
-    if category: kwargs["category"] = category
-    if max_price: kwargs["max_price"] = max_price
-    if min_price: kwargs["min_price"] = min_price
-    if in_stock: kwargs["in_stock"] = in_stock
-    return _log_and_execute("search_products", **kwargs)
-
-
-def get_product_details(product_id: str) -> str:
-    """Get detailed information about a specific product."""
-    return _log_and_execute("get_product_details", product_id=product_id)
-
-
-def check_inventory(product_id: str) -> str:
-    """Check inventory/stock level for a product."""
-    return _log_and_execute("check_inventory", product_id=product_id)
-
-
-def recommend_upsell(product_id: str) -> str:
-    """Get upsell recommendations for a product (more expensive alternatives)."""
-    return _log_and_execute("recommend_upsell", product_id=product_id)
-
-
-def recommend_cross_sell(product_id: str) -> str:
-    """Get cross-sell/complementary product recommendations."""
-    return _log_and_execute("recommend_cross_sell", product_id=product_id)
-
-
-def add_to_cart(product_id: str, product_position: int, quantity: int) -> str:
-    """Add a product to the cart. Use product_position (1-based) if product_id is unknown."""
-    kwargs = {}
-    if product_id: kwargs["product_id"] = product_id
-    if product_position: kwargs["product_position"] = product_position
-    if quantity: kwargs["quantity"] = quantity
-    return _log_and_execute("add_to_cart", **kwargs)
-
-
-def get_cart() -> str:
-    """Get current shopping cart contents and total."""
-    return _log_and_execute("get_cart")
-
-
-def calculate_cart_total() -> str:
-    """Calculate the authoritative cart total server-side."""
-    return _log_and_execute("calculate_cart_total")
-
-
-def check_policy() -> str:
-    """Check if the cart total is within the merchant spending policy limits."""
-    return _log_and_execute("check_policy")
-
-
-def request_payment_approval() -> str:
-    """Request explicit user approval before initiating payment."""
-    return _log_and_execute("request_payment_approval")
-
-
-def get_payment_status(order_id: str) -> str:
-    """Get the current payment/order status."""
-    return _log_and_execute("get_payment_status", order_id=order_id)
-
-
-# All AFC-compatible tools
-AFC_TOOLS = [
-    search_products,
-    get_product_details,
-    check_inventory,
-    recommend_upsell,
-    recommend_cross_sell,
-    add_to_cart,
-    get_cart,
-    calculate_cart_total,
-    check_policy,
-    request_payment_approval,
-    get_payment_status,
+# Tool declarations for Gemini REST API
+GEMINI_TOOL_DECLARATIONS = [
+    {
+        "name": "search_products",
+        "description": "Search the merchant product catalog. Returns matching products with prices and details.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query": {"type": "STRING", "description": "Search keywords"},
+                "category": {"type": "STRING", "description": "Product category filter"},
+                "max_price": {"type": "NUMBER", "description": "Maximum price filter"},
+                "min_price": {"type": "NUMBER", "description": "Minimum price filter"},
+                "in_stock": {"type": "BOOLEAN", "description": "Only show in-stock items"},
+            },
+        },
+    },
+    {
+        "name": "get_product_details",
+        "description": "Get detailed information about a specific product by its ID.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "product_id": {"type": "STRING", "description": "The product ID"},
+            },
+            "required": ["product_id"],
+        },
+    },
+    {
+        "name": "check_inventory",
+        "description": "Check inventory/stock for a specific product.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "product_id": {"type": "STRING", "description": "The product ID"},
+            },
+            "required": ["product_id"],
+        },
+    },
+    {
+        "name": "recommend_upsell",
+        "description": "Get upsell recommendations for a product (more expensive alternatives).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "product_id": {"type": "STRING", "description": "The product ID"},
+            },
+            "required": ["product_id"],
+        },
+    },
+    {
+        "name": "recommend_cross_sell",
+        "description": "Get cross-sell/complementary product recommendations.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "product_id": {"type": "STRING", "description": "The product ID"},
+            },
+            "required": ["product_id"],
+        },
+    },
+    {
+        "name": "add_to_cart",
+        "description": "Add a product to the shopping cart by product_id or by product_position (1-based index from search results).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "product_id": {"type": "STRING", "description": "The product ID to add"},
+                "product_position": {"type": "INTEGER", "description": "1-based position from search results"},
+                "quantity": {"type": "INTEGER", "description": "Quantity to add (default 1)"},
+            },
+        },
+    },
+    {
+        "name": "get_cart",
+        "description": "Get current shopping cart contents and total.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    {
+        "name": "calculate_cart_total",
+        "description": "Calculate the authoritative cart total server-side.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    {
+        "name": "check_policy",
+        "description": "Check if cart total is within the merchant spending policy limits.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    {
+        "name": "request_payment_approval",
+        "description": "Request explicit user approval before initiating payment.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
+    {
+        "name": "get_payment_status",
+        "description": "Get payment/order status.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "order_id": {"type": "STRING", "description": "The order ID to check"},
+            },
+        },
+    },
 ]
 
 
@@ -204,71 +165,134 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
 async def call_llm(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]],
                    db=None, session_id: str = "default") -> Dict[str, Any]:
     """
-    Call Gemini with function calling support via SYNC Chat API + AFC.
-    AFC handles thought_signatures automatically.
+    Call Gemini with function calling via REST API.
+    Handles thought_signatures by preserving raw candidate parts.
     Returns: {"content": str|None, "tool_calls": list|None}
     """
     api_key = _get_api_key()
     if api_key and api_key not in ("your_api_key_here", "placeholder_secret", ""):
-        return await _call_gemini_chat(api_key, messages, db, session_id)
+        return await _call_gemini_rest(api_key, messages, db, session_id)
     else:
         logger.warning("No valid GEMINI_API_KEY set, using fallback intent parser")
         return await _fallback_intent_parser(messages)
 
 
-async def _call_gemini_chat(api_key: str, messages: List[Dict[str, Any]],
-                            db=None, session_id: str = "default") -> Dict[str, Any]:
-    """Call Google Gemini using SYNC Chat API with AFC.
-    Uses SYNC Chat API (tools are sync) wrapped in asyncio.to_thread.
-    AFC handles thought_signatures automatically.
+async def _call_gemini_rest(api_key: str, messages: List[Dict[str, Any]],
+                             db=None, session_id: str = "default") -> Dict[str, Any]:
+    """Call Gemini via REST API with manual function calling loop.
+    
+    This preserves raw candidate parts (including thought_signatures)
+    by passing them back as-is in subsequent requests.
     """
-    if genai is None:
-        return {"content": "AI service is temporarily unavailable.", "tool_calls": None}
+    from services.agent_tools import execute_tool
 
-    try:
-        model = _get_model()
-        logger.info(f"Calling Gemini model={model}")
+    model = _get_model()
+    url = f"{GEMINI_BASE_URL}/models/{model}:generateContent?key={api_key}"
+    
+    headers = {"Content-Type": "application/json"}
+    
+    # Build initial contents from conversation history
+    contents = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if role in ("user", "model"):
+            contents.append({
+                "role": role,
+                "parts": [{"text": content}]
+            })
+    
+    # Ensure last message is from user
+    if not contents or contents[-1].get("role") != "user":
+        contents.append({
+            "role": "user",
+            "parts": [{"text": messages[-1].get("content", "Hello")}]
+        })
 
-        client = genai.Client(api_key=api_key)
+    payload = {
+        "contents": contents,
+        "systemInstruction": {
+            "parts": [{"text": AGENT_SYSTEM_PROMPT}]
+        },
+        "tools": [{"functionDeclarations": GEMINI_TOOL_DECLARATIONS}],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1024,
+        },
+    }
 
-        # Set context for tool functions
-        set_context(db=db, session_id=session_id)
-        clear_tool_calls_log()
+    all_tool_calls = []
+    MAX_ITERATIONS = 10
 
-        # Create config with AFC-compatible tool functions
-        config = types.GenerateContentConfig(
-            system_instruction=AGENT_SYSTEM_PROMPT,
-            tools=AFC_TOOLS,
-            temperature=0.7,
-            max_output_tokens=1024,
-        )
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for iteration in range(MAX_ITERATIONS):
+            try:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Gemini API HTTP error: {e.response.status_code}: {e.response.text[:200]}")
+                return {"content": "I'm having trouble connecting to the AI service. Please try again in a moment.", "tool_calls": None}
+            except Exception as e:
+                logger.error(f"Gemini API request failed: {type(e).__name__}: {e}")
+                return {"content": "I'm having trouble connecting to the AI service. Please try again in a moment.", "tool_calls": None}
 
-        # Get the last user message
-        user_msg = ""
-        for msg in reversed(messages):
-            if msg.get("role") == "user" and not msg.get("tool_name"):
-                user_msg = msg.get("content", "")
-                break
-        if not user_msg:
-            user_msg = "Hello"
+            # Parse candidates
+            candidates = data.get("candidates", [])
+            if not candidates:
+                return {"content": "I couldn't generate a response. Please try again.", "tool_calls": None}
 
-        # Use SYNC Chat API in a thread to avoid blocking the event loop.
-        # AFC handles tool loop + thought_signatures automatically.
-        def _sync_call():
-            sync_chat = client.chats.create(model=model, config=config)
-            return sync_chat.send_message(user_msg)
-        response = await asyncio.to_thread(_sync_call)
+            candidate = candidates[0]
+            parts = candidate.get("content", {}).get("parts", [])
+            
+            # Check for function calls
+            function_calls = [p for p in parts if "functionCall" in p]
+            text_parts = [p.get("text", "") for p in parts if "text" in p]
+            
+            if not function_calls:
+                # No more tool calls - return final text response
+                final_text = "\n".join(text_parts) if text_parts else None
+                return {"content": final_text, "tool_calls": all_tool_calls if all_tool_calls else None}
 
-        # Parse response
-        text = response.text if response.text else None
-        tool_calls = get_tool_calls_log()
+            # Execute tool calls on backend
+            # First, add the model's response to contents (preserving raw parts with thought_signatures)
+            model_content = {"role": "model", "parts": parts}
+            contents.append(model_content)
+            
+            # Execute each tool and build tool response parts
+            tool_parts = []
+            for fc in function_calls:
+                fc_data = fc["functionCall"]
+                tool_name = fc_data["name"]
+                tool_args = fc_data.get("args", {})
 
-        logger.info(f"Gemini responded: text_len={len(text) if text else 0}, tools={len(tool_calls)}")
-        return {"content": text, "tool_calls": tool_calls if tool_calls else None}
+                all_tool_calls.append({"name": tool_name, "arguments": tool_args})
 
-    except Exception as e:
-        logger.error(f"Gemini call failed: {type(e).__name__}: {e}", exc_info=True)
-        return {"content": "I'm having trouble connecting to the AI service. Please try again in a moment.", "tool_calls": None}
+                # Execute the tool
+                try:
+                    result_str = await execute_tool(tool_name, tool_args, db, session_id)
+                except Exception as e:
+                    logger.error(f"Tool {tool_name} failed: {e}")
+                    result_str = json.dumps({"error": f"Tool execution failed: {str(e)}"})
+
+                tool_parts.append({
+                    "functionResponse": {
+                        "name": tool_name,
+                        "response": json.loads(result_str) if result_str.strip().startswith("{") or result_str.strip().startswith("[") else {"output": result_str},
+                    }
+                })
+
+            # Add tool results to contents
+            contents.append({"role": "user", "parts": tool_parts})
+            
+            # Update payload with new contents
+            payload["contents"] = contents
+
+        # Max iterations reached
+        return {
+            "content": "I've processed your request. Is there anything else I can help with?",
+            "tool_calls": all_tool_calls if all_tool_calls else None,
+        }
 
 
 async def _fallback_intent_parser(messages: List[Dict[str, Any]]) -> Dict[str, Any]:

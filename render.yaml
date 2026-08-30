@@ -19,6 +19,6 @@ services:
       - key: RAZORPAY_KEY_SECRET
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
-        sync: false
+        value: ""
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: ""

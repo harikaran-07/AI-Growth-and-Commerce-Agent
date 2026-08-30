@@ -24,7 +24,7 @@ def _get_api_key():
 
 
 def _get_model():
-    return os.getenv("GEMINI_MODEL", os.getenv("AI_MODEL", "gemini-2.5-flash"))
+    return os.getenv("GEMINI_MODEL", os.getenv("AI_MODEL", "gemini-3.5-flash-lite"))
 
 
 AGENT_SYSTEM_PROMPT = """You are MerchantFlow AI, a helpful shopping assistant for TechZone Electronics.

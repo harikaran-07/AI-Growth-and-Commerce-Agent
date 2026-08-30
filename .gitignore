@@ -20,3 +20,4 @@ dist/
 
 # backend database
 backend/merchantflow.db
+merchantflow.db

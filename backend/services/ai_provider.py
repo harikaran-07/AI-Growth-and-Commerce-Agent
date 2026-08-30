@@ -1,6 +1,6 @@
 """
 AI Provider - Google Gemini Integration
-Uses Google GenAI SDK for LLM-powered agent with function/tool calling.
+Uses Google GenAI SDK with manual tool calling loop.
 Falls back to a simple intent parser when no API key is configured.
 """
 
@@ -10,6 +10,13 @@ import logging
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 
 def _get_api_key():
@@ -32,105 +39,259 @@ STRICT RULES:
 5. Never bypass spending limits.
 6. If a tool fails, explain the failure and recover safely.
 7. Be concise and friendly. For financial actions, be transparent.
-8. Only provide short user-facing reasons for recommendations, e.g., "Recommended because it is a compatible accessory."
+8. Only provide short user-facing reasons for recommendations.
 9. Never expose internal chain-of-thought, tool names, or system details to the user.
-10. When the user references "that one", "the first one", "the second one" etc., refer to products from the most recent search results in the conversation.
+10. When the user references "that one", "the first one", refer to products from the most recent search results.
 11. Never directly access the database or Razorpay.
 12. Never approve a payment on behalf of the user.
+13. When the user asks to add a product by position (like "add the first one" or "add the second"), use the add_to_cart tool with product_position parameter.
 
 You are a merchant shopping assistant. Behave professionally and helpfully."""
 
 
-async def call_llm(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Call Gemini with function calling support."""
+# Tool definitions in Gemini function_declarations format
+GEMINI_TOOLS = [
+    {
+        "name": "search_products",
+        "description": "Search the merchant product catalog. Returns matching products with details.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query text, e.g. 'wireless headphones'"},
+                "category": {"type": "string", "description": "Product category, e.g. 'Audio', 'Computer Accessories'"},
+                "max_price": {"type": "number", "description": "Maximum price filter in INR"},
+                "min_price": {"type": "number", "description": "Minimum price filter in INR"},
+                "in_stock": {"type": "boolean", "description": "Only show in-stock items"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_product_details",
+        "description": "Get detailed information about a specific product by its ID.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "string", "description": "The product ID"}
+            },
+            "required": ["product_id"]
+        }
+    },
+    {
+        "name": "check_inventory",
+        "description": "Check inventory/stock availability for a product.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "string", "description": "The product ID to check"}
+            },
+            "required": ["product_id"]
+        }
+    },
+    {
+        "name": "recommend_upsell",
+        "description": "Get upsell (higher-end) recommendations for a product.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "string", "description": "The product ID to get upsell for"}
+            },
+            "required": ["product_id"]
+        }
+    },
+    {
+        "name": "recommend_cross_sell",
+        "description": "Get cross-sell (complementary) product recommendations.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "string", "description": "The product ID to get cross-sell for"}
+            },
+            "required": ["product_id"]
+        }
+    },
+    {
+        "name": "add_to_cart",
+        "description": "Add a product to the shopping cart. Use product_id if known, or product_position if user referenced by position (e.g. 'the first one').",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "string", "description": "Product ID to add"},
+                "product_position": {"type": "integer", "description": "Position in search results (1-based)"},
+                "quantity": {"type": "integer", "description": "Number to add (default 1)"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_cart",
+        "description": "Get current shopping cart contents and total.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "calculate_cart_total",
+        "description": "Calculate the authoritative cart total server-side.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "check_policy",
+        "description": "Check if the cart total is within the merchant's spending policy limits.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "request_payment_approval",
+        "description": "Request explicit user approval before initiating a payment.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "get_payment_status",
+        "description": "Get the status of a payment/order.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "order_id": {"type": "string", "description": "Order ID to check"}
+            },
+            "required": []
+        }
+    },
+]
+
+
+def get_tool_definitions() -> List[Dict[str, Any]]:
+    """Return tool definitions for the LLM."""
+    return GEMINI_TOOLS
+
+
+def _map_type(type_str: str):
+    """Map JSON Schema types to Gemini Schema types."""
+    mapping = {
+        "string": types.Type.STRING,
+        "number": types.Type.NUMBER,
+        "integer": types.Type.INTEGER,
+        "boolean": types.Type.BOOLEAN,
+        "object": types.Type.OBJECT,
+        "array": types.Type.ARRAY,
+    }
+    return mapping.get(type_str, types.Type.STRING)
+
+
+def _build_gemini_contents(messages: List[Dict[str, Any]]) -> List:
+    """Convert message history to Gemini contents format."""
+    contents = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        tool_calls = msg.get("tool_calls")
+
+        if role == "user":
+            # Check if this is a function response (tool result)
+            if msg.get("tool_name"):
+                try:
+                    parsed = json.loads(content) if isinstance(content, str) else content
+                except (json.JSONDecodeError, TypeError):
+                    parsed = {"result": content}
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part.from_function_response(
+                        name=msg["tool_name"],
+                        response=parsed
+                    )]
+                ))
+            else:
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part.from_text(text=content or "")]
+                ))
+        elif role == "assistant":
+            parts = []
+            if content:
+                parts.append(types.Part.from_text(text=str(content)))
+            if tool_calls:
+                for tc in tool_calls:
+                    args = {}
+                    for k, v in tc.get("arguments", {}).items():
+                        args[k] = v
+                    parts.append(types.Part.from_function_call(
+                        name=tc["name"],
+                        args=args
+                    ))
+            if parts:
+                contents.append(types.Content(role="model", parts=parts))
+
+    return contents
+
+
+async def call_llm(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]],
+                   db=None, session_id: str = "default") -> Dict[str, Any]:
+    """
+    Call Gemini with function calling support.
+    Returns: {"content": str|None, "tool_calls": list|None}
+    """
     api_key = _get_api_key()
     if api_key and api_key not in ("your_api_key_here", "placeholder_secret", ""):
-        return await _call_gemini(api_key, messages, tools)
+        return await _call_gemini(api_key, messages, db, session_id)
     else:
         logger.warning("No valid GEMINI_API_KEY set, using fallback intent parser")
         return await _fallback_intent_parser(messages)
 
 
-async def _call_gemini(api_key: str, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Call Google Gemini API with function calling."""
-    try:
-        from google import genai
-        from google.genai import types
+async def _call_gemini(api_key: str, messages: List[Dict[str, Any]],
+                       db=None, session_id: str = "default") -> Dict[str, Any]:
+    """Call Google Gemini using generate_content for manual tool loop."""
+    if genai is None:
+        return {"content": "AI service is temporarily unavailable. google-genai package not installed.", "tool_calls": None}
 
+    try:
         model = _get_model()
-        logger.info(f"Calling Gemini model={model}, key_len={len(api_key)}")
+        logger.info(f"Calling Gemini model={model}")
 
         client = genai.Client(api_key=api_key)
 
-        # Convert tools to Gemini format
-        gemini_tools = []
-        if tools:
-            func_declarations = []
-            for tool in tools:
-                # Convert our schema to Gemini Schema
-                properties = {}
-                for pname, pdef in tool.get("parameters", {}).get("properties", {}).items():
-                    type_map = {
-                        "string": types.Type.STRING,
-                        "number": types.Type.NUMBER,
-                        "integer": types.Type.INTEGER,
-                        "boolean": types.Type.BOOLEAN,
-                    }
-                    properties[pname] = types.Schema(
-                        type=type_map.get(pdef.get("type", "string"), types.Type.STRING),
-                        description=pdef.get("description", "")
-                    )
-
-                required_fields = tool.get("parameters", {}).get("required", [])
-
-                func_declarations.append(types.FunctionDeclaration(
-                    name=tool["name"],
-                    description=tool.get("description", ""),
-                    parameters=types.Schema(
-                        type=types.Type.OBJECT,
-                        properties=properties,
-                        required=required_fields if required_fields else None
-                    )
-                ))
-            gemini_tools = [types.Tool(function_declarations=func_declarations)]
-
-        # Build contents from conversation history
-        contents = []
-        for msg in messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if role == "assistant":
-                contents.append(types.Content(
-                    role="model",
-                    parts=[types.Part(text=content or "")]
-                ))
-            elif role == "user":
-                contents.append(types.Content(
-                    role="user",
-                    parts=[types.Part(text=content)]
-                ))
-            elif role == "tool":
-                # Tool results - include as function response
-                tool_call_id = msg.get("tool_call_id", "")
-                try:
-                    result_data = json.loads(content)
-                except json.JSONDecodeError:
-                    result_data = {"result": content}
-                contents.append(types.Content(
-                    role="user",
-                    parts=[types.Part.from_function_response(
-                        name=tool_call_id.split("_")[0] if "_" in tool_call_id else "tool",
-                        response=result_data
-                    )]
-                ))
+        # Build Gemini contents from message history
+        contents = _build_gemini_contents(messages)
 
         if not contents:
-            contents = [types.Content(role="user", parts=[types.Part(text="Hello")])]
+            return {"content": "Hello! How can I help you find products today?", "tool_calls": None}
 
-        # Make the API call
+        # Create tool declarations
+        function_declarations = []
+        for tool_def in GEMINI_TOOLS:
+            function_declarations.append(
+                types.FunctionDeclaration(
+                    name=tool_def["name"],
+                    description=tool_def["description"],
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            k: types.Schema(
+                                type=_map_type(v["type"]),
+                                description=v.get("description", "")
+                            ) for k, v in tool_def["parameters"].get("properties", {}).items()
+                        },
+                        required=tool_def["parameters"].get("required", [])
+                    )
+                )
+            )
+
         config = types.GenerateContentConfig(
-            tools=gemini_tools if gemini_tools else None,
             system_instruction=AGENT_SYSTEM_PROMPT,
+            tools=[types.Tool(function_declarations=function_declarations)],
             temperature=0.7,
             max_output_tokens=1024
         )
@@ -141,17 +302,38 @@ async def _call_gemini(api_key: str, messages: List[Dict[str, Any]], tools: List
             config=config
         )
 
-        # Parse response
-        result = {"content": response.text if response.text else None, "tool_calls": None}
+        # Extract response
+        result = {"content": None, "tool_calls": None}
 
-        if response.function_calls:
-            result["tool_calls"] = []
-            for fc in response.function_calls:
-                result["tool_calls"].append({
-                    "id": f"call_{fc.name}",
-                    "name": fc.name,
-                    "arguments": dict(fc.args) if fc.args else {}
-                })
+        if response.candidates and response.candidates[0].content:
+            parts = response.candidates[0].content.parts
+            has_function_calls = False
+            text_parts = []
+
+            for part in parts:
+                if hasattr(part, "function_call") and part.function_call:
+                    has_function_calls = True
+                    if result["tool_calls"] is None:
+                        result["tool_calls"] = []
+                    fc = part.function_call
+                    args = {}
+                    if fc.args:
+                        for k, v in fc.args.items():
+                            args[k] = v
+                    result["tool_calls"].append({
+                        "id": f"call_{fc.name}_{len(result['tool_calls'])}",
+                        "name": fc.name,
+                        "arguments": args
+                    })
+                elif hasattr(part, "text") and part.text:
+                    text_parts.append(part.text)
+
+            if text_parts:
+                result["content"] = "\n".join(text_parts)
+
+            # If there are function calls, prefer them over text
+            if has_function_calls:
+                result["content"] = result["content"] or None
 
         return result
 
@@ -213,20 +395,3 @@ async def _fallback_intent_parser(messages: List[Dict[str, Any]]) -> Dict[str, A
         return {"content": None, "tool_calls": [{"id": "fb4", "name": "request_payment_approval", "arguments": {}}]}
 
     return {"content": "I can help you find products, add items to your cart, and complete purchases. Try asking 'Find headphones under 3000'.", "tool_calls": None}
-
-
-def get_tool_definitions() -> List[Dict[str, Any]]:
-    """Return tool definitions for the LLM."""
-    return [
-        {"name": "search_products", "description": "Search the merchant product catalog. Use when the user wants to find or browse products.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Free text search query"}, "category": {"type": "string", "description": "Product category (Audio, Computer Accessories, Mobile Accessories, Office Products, Electronics)"}, "max_price": {"type": "number", "description": "Maximum price in INR"}, "min_price": {"type": "number", "description": "Minimum price in INR"}, "in_stock": {"type": "boolean", "description": "Only show in-stock products"}}, "required": []}},
-        {"name": "get_product_details", "description": "Get detailed info about a specific product by ID.", "parameters": {"type": "object", "properties": {"product_id": {"type": "string", "description": "The product ID"}}, "required": ["product_id"]}},
-        {"name": "check_inventory", "description": "Check inventory/stock for a product.", "parameters": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"]}},
-        {"name": "recommend_upsell", "description": "Get upsell recommendations (higher-tier alternatives).", "parameters": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"]}},
-        {"name": "recommend_cross_sell", "description": "Get cross-sell/complementary product recommendations.", "parameters": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"]}},
-        {"name": "add_to_cart", "description": "Add a product to the cart by product_id or product_position (1-based from last search).", "parameters": {"type": "object", "properties": {"product_id": {"type": "string"}, "product_position": {"type": "integer"}, "quantity": {"type": "integer"}}, "required": []}},
-        {"name": "get_cart", "description": "Get current cart contents and total.", "parameters": {"type": "object", "properties": {}, "required": []}},
-        {"name": "calculate_cart_total", "description": "Calculate authoritative cart total server-side.", "parameters": {"type": "object", "properties": {}, "required": []}},
-        {"name": "check_policy", "description": "Check if cart total is within spending policy limits.", "parameters": {"type": "object", "properties": {}, "required": []}},
-        {"name": "request_payment_approval", "description": "Request user approval before initiating payment.", "parameters": {"type": "object", "properties": {}, "required": []}},
-        {"name": "get_payment_status", "description": "Get payment/order status.", "parameters": {"type": "object", "properties": {"order_id": {"type": "string"}}, "required": []}},
-    ]

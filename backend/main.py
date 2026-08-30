@@ -149,3 +149,33 @@ else:
     @app.get("/")
     async def root():
         return {"message": "MerchantFlow AI - Buildathon API", "version": "1.0.0"}
+
+@app.get("/debug/ai")
+async def debug_ai():
+    """Debug endpoint to check AI configuration."""
+    import os
+    key = os.getenv("GEMINI_API_KEY", os.getenv("AI_API_KEY", ""))
+    model = os.getenv("GEMINI_MODEL", os.getenv("AI_MODEL", "gemini-3.5-flash-lite"))
+    provider = os.getenv("AI_PROVIDER", "gemini")
+    from services.ai_provider import genai, AFC_TOOLS
+    
+    result = {
+        "provider": provider,
+        "model": model,
+        "key_length": len(key) if key else 0,
+        "key_prefix": key[:10] if key else "none",
+        "genai_installed": genai is not None,
+        "tools_count": len(AFC_TOOLS),
+    }
+    
+    # Try a simple Gemini call
+    if key and genai:
+        try:
+            client = genai.Client(api_key=key)
+            resp = client.models.generate_content(model=model, contents="Say hi in 5 words")
+            result["gemini_test"] = "OK"
+            result["gemini_response"] = resp.text[:100] if resp.text else "empty"
+        except Exception as e:
+            result["gemini_test"] = f"FAIL: {type(e).__name__}: {str(e)[:200]}"
+    
+    return result

@@ -13,18 +13,14 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # Detect provider
-AI_PROVIDER = os.getenv("AI_PROVIDER", "groq").lower()
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").lower()
 
 
 def _get_api_key():
-    if AI_PROVIDER == "groq":
-        return os.getenv("GROQ_API_KEY", "")
     return os.getenv("GEMINI_API_KEY", os.getenv("AI_API_KEY", ""))
 
 
 def _get_model():
-    if AI_PROVIDER == "groq":
-        return os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
     return os.getenv("AI_MODEL", "gemini-3.6-flash")
 
 

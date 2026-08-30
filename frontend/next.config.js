@@ -1,16 +1,16 @@
 /** @type {import('next').NextConfig} */
-const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 const nextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
-      },
-    ]
+  // Static export - produces HTML/JS/CSS in /out directory
+  // No Next.js server needed; FastAPI serves these files
+  output: 'export',
+
+  // Disable image optimization for static export
+  images: {
+    unoptimized: true,
   },
-  // Allow the frontend to be embedded or called from Render
+
+  // Security headers
   async headers() {
     return [
       {

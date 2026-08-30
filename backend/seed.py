@@ -636,7 +636,7 @@ async def seed():
             return
 
         # Create merchant
-        merchant = Merchant(name="TechZone Electronics", description="Your one-stop multi-category shop")
+        merchant = Merchant(name="TechZone Electronics", email="admin@techzone.in")
         db.add(merchant)
         await db.commit()
         await db.refresh(merchant)

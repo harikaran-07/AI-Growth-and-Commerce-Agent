@@ -1,6 +1,7 @@
 #!/bin/bash
 # Unified build script for MerchantFlow AI
-# Builds the Next.js frontend and installs Python backend dependencies
+# Installs Python backend dependencies
+# Frontend is pre-built in frontend/out/ (committed to repo)
 
 set -e
 
@@ -11,19 +12,6 @@ echo "Installing Python dependencies..."
 cd backend
 pip install -r requirements.txt
 
-# Build Next.js frontend
-echo "Building Next.js frontend..."
-cd ../frontend
-npm install
-npm run build
-
-# Verify the static export was created
-if [ -d "out/_next" ]; then
-    echo "Frontend build successful - static export created in frontend/out/"
-else
-    echo "ERROR: Frontend build failed - out/_next not found"
-    exit 1
-fi
-
 cd ..
 echo "=== Build complete ==="
+echo "Frontend static files are in frontend/out/ (pre-built)"

@@ -282,32 +282,3 @@ async def approve_payment_endpoint(approval_id: str, db: AsyncSession = Depends(
     await db.commit()
 
     return {"status": "approved", "order_id": approval.order_id}
-
-
-@router.get("/test-rest")
-async def test_rest():
-    """Test Gemini REST API directly."""
-    import os
-    key = os.getenv("GEMINI_API_KEY", "")
-    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
-    
-    import httpx
-    
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-    
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": "Say hello in 3 words"}]}],
-        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 100},
-    }
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            resp = await client.post(url, json=payload)
-            data = resp.json()
-            if "candidates" in data:
-                text = data["candidates"][0]["content"]["parts"][0].get("text", "")
-                return {"status": "ok", "text": text[:200], "model": model}
-            else:
-                return {"error": data}
-        except Exception as e:
-            return {"error": f"{type(e).__name__}: {str(e)[:300]}"}

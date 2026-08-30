@@ -88,6 +88,16 @@ app.include_router(approvals.router, prefix="/api/approvals", tags=["Approvals"]
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
 
 
+@app.get("/debug/ai")
+async def debug_ai():
+    import os
+    key = os.getenv("GEMINI_API_KEY", os.getenv("AI_API_KEY", ""))
+    model = os.getenv("GEMINI_MODEL", os.getenv("AI_MODEL", "not set"))
+    provider = os.getenv("AI_PROVIDER", "not set")
+    key_len = len(key) if key else 0
+    key_valid = key_len > 10 and key not in ("your_api_key_here", "")
+    return {"provider": provider, "model": model, "key_len": key_len, "key_valid": key_valid, "has_key": bool(key)}
+
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "merchantflow"}

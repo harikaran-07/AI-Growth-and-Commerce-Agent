@@ -1,6 +1,6 @@
 """
 AI Agent Chat Endpoint
-Uses LLM with controlled tool/function calling for agentic commerce.
+Uses Gemini Chat API with automatic function calling for agentic commerce.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,8 +16,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-MAX_TOOL_CALLS_PER_TURN = 10
 
 
 class ChatRequest(BaseModel):
@@ -39,7 +37,10 @@ class ChatResponse(BaseModel):
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
     Main AI agent chat endpoint.
-    Uses LLM with tool calling to process user messages.
+    Uses Gemini SYNC Chat API with AFC (Automatic Function Calling).
+    The AFC handles the full tool loop internally - tools are executed
+    by the SDK, results are sent back to the model, and the final
+    text response is returned.
     """
     session_id = request.session_id
     session_data = get_session_data(session_id)
@@ -48,113 +49,75 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     messages = session_data.get("conversation_history", [])
     messages.append({"role": "user", "content": request.message})
 
-    # Keep conversation history manageable (last 20 messages + system context)
+    # Keep conversation history manageable
     if len(messages) > 20:
         messages = messages[-20:]
 
-    all_tool_results = []
     all_tool_calls_used = []
-    response_text = ""
     products_found = []
     recommendations = []
     cart_info = None
     approval_info = None
 
-    for turn in range(MAX_TOOL_CALLS_PER_TURN):
-        try:
-            llm_response = await call_llm(messages, get_tool_definitions())
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            return ChatResponse(
-                message="AI service is temporarily unavailable. You can still browse the merchant catalog at /products.",
-                products=[],
-                recommendations=[],
-                tool_calls=[]
-            )
+    try:
+        # Single call - SYNC Chat API with AFC handles tool loop internally
+        llm_response = await call_llm(messages, get_tool_definitions(), db=db, session_id=session_id)
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        return ChatResponse(
+            message="AI service is temporarily unavailable. You can still browse the merchant catalog.",
+            products=[],
+            recommendations=[],
+            tool_calls=[]
+        )
 
-        # If LLM has a text response and no tool calls, we're done
-        if llm_response.get("content") and not llm_response.get("tool_calls"):
-            response_text = llm_response["content"]
-            messages.append({"role": "assistant", "content": response_text})
-            break
+    # AFC already executed tools and generated the final response.
+    # The response contains both the text and the tool calls log.
+    response_text = llm_response.get("content") or ""
+    tool_calls = llm_response.get("tool_calls", []) or []
 
-        # Process tool calls
-        tool_calls = llm_response.get("tool_calls", [])
-        if not tool_calls:
-            response_text = llm_response.get("content", "I'm not sure how to help with that. Try asking about products!")
-            messages.append({"role": "assistant", "content": response_text})
-            break
-
-        # Add assistant message with tool calls to history
-        messages.append({
-            "role": "assistant",
-            "content": llm_response.get("content"),
-            "tool_calls": tool_calls
+    # Format tool calls for the frontend response
+    for tc in tool_calls:
+        all_tool_calls_used.append({
+            "tool": tc.get("name", "unknown"),
+            "arguments": tc.get("arguments", {}),
         })
 
-        for tc in tool_calls:
-            tool_name = tc["name"]
-            tool_args = tc["arguments"]
-            tool_id = tc.get("id", f"call_{tool_name}")
+    # Extract structured data from the session store
+    # (tool functions stored results there during AFC execution)
+    try:
+        from services.agent_tools import session_store
+        if session_id in session_store:
+            sess = session_store[session_id]
+            session_products = sess.get("product_results", [])
+            if session_products:
+                products_found = session_products
+            recommendations = sess.get("recommendations", []) or []
+            cart_info = sess.get("cart_data")
+    except Exception:
+        pass
 
-            # Execute the tool on the backend
-            tool_result = await execute_tool(tool_name, tool_args, db, session_id)
+    # Get cart from session data as fallback
+    if not cart_info:
+        try:
+            sd = get_session_data(session_id)
+            cart_info = sd.get("cart_data")
+        except Exception:
+            pass
 
-            all_tool_calls_used.append({
-                "tool": tool_name,
-                "arguments": tool_args,
-                "result_summary": tool_result[:200]
-            })
-
-            # Parse tool result and extract data
-            try:
-                result_data = json.loads(tool_result)
-            except json.JSONDecodeError:
-                result_data = {"result": tool_result}
-
-            # Collect products for frontend
-            if tool_name == "search_products" and "products" in result_data:
-                products_found = result_data["products"]
-
-            if tool_name in ("recommend_upsell", "recommend_cross_sell") and "recommendations" in result_data:
-                recommendations.extend(result_data["recommendations"])
-
-            if tool_name == "get_cart" and "cart" in result_data:
-                cart_info = result_data["cart"]
-
-            if tool_name == "request_payment_approval":
-                if "error" in result_data:
-                    response_text = result_data["error"]
-                else:
-                    approval_info = result_data
-
-            # Add tool result to conversation for LLM
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_id,
-                "content": tool_result
-            })
-
-        # If we processed tool calls, ask the LLM to generate a response
-        # (will loop back to the top)
-        if not response_text:
-            continue
-
-    # Save conversation history
-    session_data["conversation_history"] = messages
-
-    # If no response text was generated from tools, provide a default
     if not response_text:
         if products_found:
             response_text = f"I found {len(products_found)} product(s) for you. Would you like to add any to your cart?"
         elif recommendations:
             response_text = "Here are some recommendations based on your interests."
         elif cart_info:
-            response_text = f"Your cart has {cart_info.get('item_count', 0)} item(s) totaling ₹{cart_info.get('total', 0):.0f}."
-        elif approval_info:
-            response_text = approval_info.get("message", "Payment approval requested.")
+            response_text = f"Your cart has {cart_info.get('item_count', 0)} item(s) totaling {cart_info.get('total', 0):.0f}."
         else:
             response_text = "I've processed your request. Is there anything else I can help with?"
+
+    # Save conversation history
+    messages.append({"role": "assistant", "content": response_text})
+    session_data["conversation_history"] = messages
 
     return ChatResponse(
         message=response_text,
@@ -193,7 +156,6 @@ async def search_products(request: SearchRequest, db: AsyncSession = Depends(get
     data = json.loads(result)
     products = data.get("products", [])
 
-    # Get recommendations for first product
     recommendations = []
     if products:
         rec_result = await execute_tool("recommend_cross_sell", {
@@ -205,7 +167,7 @@ async def search_products(request: SearchRequest, db: AsyncSession = Depends(get
     return SearchResponse(products=products, recommendations=recommendations)
 
 
-# Keep backward-compatible agent endpoints
+# Backward-compatible agent endpoints
 class CartRequest(BaseModel):
     session_id: str
     product_ids: List[str]
@@ -299,6 +261,7 @@ async def request_approval_endpoint(request: PaymentRequest, db: AsyncSession = 
 async def approve_payment_endpoint(approval_id: str, db: AsyncSession = Depends(get_db)):
     """Approve payment (backward compatible)."""
     from models.models import Approval, Order
+    from sqlalchemy import select
 
     result = await db.execute(select(Approval).where(Approval.id == approval_id))
     approval = result.scalar_one_or_none()
@@ -319,7 +282,3 @@ async def approve_payment_endpoint(approval_id: str, db: AsyncSession = Depends(
     await db.commit()
 
     return {"status": "approved", "order_id": approval.order_id}
-
-
-# Import for backward-compatible approve endpoint
-from sqlalchemy import select

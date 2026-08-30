@@ -1,39 +1,249 @@
+"""
+AI Agent Chat Endpoint
+Uses LLM with controlled tool/function calling for agentic commerce.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from models.database import get_db
-from models.models import Product, ProductRelationship, Cart, CartItem, Order, Policy, Approval, AuditLog, Customer
+from services.ai_provider import call_llm, get_tool_definitions
+from services.agent_tools import execute_tool, get_session_data
 from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime, timezone
-import uuid
+from typing import List, Optional, Any
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+MAX_TOOL_CALLS_PER_TURN = 10
+
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: str
+
+
+class ChatResponse(BaseModel):
+    message: str
+    products: List[dict] = []
+    recommendations: List[dict] = []
+    cart: Optional[dict] = None
+    approval: Optional[dict] = None
+    payment: Optional[dict] = None
+    tool_calls: List[dict] = []
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Main AI agent chat endpoint.
+    Uses LLM with tool calling to process user messages.
+    """
+    session_id = request.session_id
+    session_data = get_session_data(session_id)
+
+    # Build conversation history for the LLM
+    messages = session_data.get("conversation_history", [])
+    messages.append({"role": "user", "content": request.message})
+
+    # Keep conversation history manageable (last 20 messages + system context)
+    if len(messages) > 20:
+        messages = messages[-20:]
+
+    all_tool_results = []
+    all_tool_calls_used = []
+    response_text = ""
+    products_found = []
+    recommendations = []
+    cart_info = None
+    approval_info = None
+
+    for turn in range(MAX_TOOL_CALLS_PER_TURN):
+        try:
+            llm_response = await call_llm(messages, get_tool_definitions())
+        except Exception as e:
+            logger.error(f"LLM call failed: {e}")
+            return ChatResponse(
+                message="AI service is temporarily unavailable. You can still browse the merchant catalog at /products.",
+                products=[],
+                recommendations=[],
+                tool_calls=[]
+            )
+
+        # If LLM has a text response and no tool calls, we're done
+        if llm_response.get("content") and not llm_response.get("tool_calls"):
+            response_text = llm_response["content"]
+            messages.append({"role": "assistant", "content": response_text})
+            break
+
+        # Process tool calls
+        tool_calls = llm_response.get("tool_calls", [])
+        if not tool_calls:
+            response_text = llm_response.get("content", "I'm not sure how to help with that. Try asking about products!")
+            messages.append({"role": "assistant", "content": response_text})
+            break
+
+        # Add assistant message with tool calls to history
+        messages.append({
+            "role": "assistant",
+            "content": llm_response.get("content"),
+            "tool_calls": tool_calls
+        })
+
+        for tc in tool_calls:
+            tool_name = tc["name"]
+            tool_args = tc["arguments"]
+            tool_id = tc.get("id", f"call_{tool_name}")
+
+            # Execute the tool on the backend
+            tool_result = await execute_tool(tool_name, tool_args, db, session_id)
+
+            all_tool_calls_used.append({
+                "tool": tool_name,
+                "arguments": tool_args,
+                "result_summary": tool_result[:200]
+            })
+
+            # Parse tool result and extract data
+            try:
+                result_data = json.loads(tool_result)
+            except json.JSONDecodeError:
+                result_data = {"result": tool_result}
+
+            # Collect products for frontend
+            if tool_name == "search_products" and "products" in result_data:
+                products_found = result_data["products"]
+
+            if tool_name in ("recommend_upsell", "recommend_cross_sell") and "recommendations" in result_data:
+                recommendations.extend(result_data["recommendations"])
+
+            if tool_name == "get_cart" and "cart" in result_data:
+                cart_info = result_data["cart"]
+
+            if tool_name == "request_payment_approval":
+                if "error" in result_data:
+                    response_text = result_data["error"]
+                else:
+                    approval_info = result_data
+
+            # Add tool result to conversation for LLM
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_id,
+                "content": tool_result
+            })
+
+        # If we processed tool calls, ask the LLM to generate a response
+        # (will loop back to the top)
+        if not response_text:
+            continue
+
+    # Save conversation history
+    session_data["conversation_history"] = messages
+
+    # If no response text was generated from tools, provide a default
+    if not response_text:
+        if products_found:
+            response_text = f"I found {len(products_found)} product(s) for you. Would you like to add any to your cart?"
+        elif recommendations:
+            response_text = "Here are some recommendations based on your interests."
+        elif cart_info:
+            response_text = f"Your cart has {cart_info.get('item_count', 0)} item(s) totaling ₹{cart_info.get('total', 0):.0f}."
+        elif approval_info:
+            response_text = approval_info.get("message", "Payment approval requested.")
+        else:
+            response_text = "I've processed your request. Is there anything else I can help with?"
+
+    return ChatResponse(
+        message=response_text,
+        products=products_found,
+        recommendations=recommendations,
+        cart=cart_info,
+        approval=approval_info,
+        payment=None,
+        tool_calls=all_tool_calls_used
+    )
+
+
+# Backward compatibility: keep /search endpoint
 class SearchRequest(BaseModel):
     query: str
     max_price: Optional[float] = None
     category: Optional[str] = None
     session_id: str
 
+
 class SearchResponse(BaseModel):
     products: List[dict]
     recommendations: List[dict]
 
+
+@router.post("/search", response_model=SearchResponse)
+async def search_products(request: SearchRequest, db: AsyncSession = Depends(get_db)):
+    """Backward-compatible search endpoint."""
+    result = await execute_tool("search_products", {
+        "query": request.query,
+        "max_price": request.max_price,
+        "category": request.category,
+        "in_stock": True
+    }, db, request.session_id)
+
+    data = json.loads(result)
+    products = data.get("products", [])
+
+    # Get recommendations for first product
+    recommendations = []
+    if products:
+        rec_result = await execute_tool("recommend_cross_sell", {
+            "product_id": products[0]["product_id"]
+        }, db, request.session_id)
+        rec_data = json.loads(rec_result)
+        recommendations = rec_data.get("recommendations", [])
+
+    return SearchResponse(products=products, recommendations=recommendations)
+
+
+# Keep backward-compatible agent endpoints
 class CartRequest(BaseModel):
     session_id: str
     product_ids: List[str]
     quantities: List[int] = []
+
 
 class CartResponse(BaseModel):
     cart_id: str
     items: List[dict]
     total: float
 
+
+@router.post("/cart", response_model=CartResponse)
+async def create_agent_cart(request: CartRequest, db: AsyncSession = Depends(get_db)):
+    """Create a cart with products (backward compatible)."""
+    results = []
+    total = 0
+
+    for i, pid in enumerate(request.product_ids):
+        qty = request.quantities[i] if i < len(request.quantities) else 1
+        result = await execute_tool("add_to_cart", {
+            "product_id": pid,
+            "quantity": qty
+        }, db, request.session_id)
+        data = json.loads(result)
+        if "product" in data:
+            results.append(data["product"])
+            total += data["product"]["subtotal"]
+
+    cart_id = get_session_data(request.session_id).get("cart_id") or ""
+
+    return CartResponse(cart_id=cart_id, items=results, total=total)
+
+
 class PaymentRequest(BaseModel):
     cart_id: str
     session_id: str
+
 
 class PolicyCheckResponse(BaseModel):
     allowed: bool
@@ -41,227 +251,75 @@ class PolicyCheckResponse(BaseModel):
     total: float
     limit: float
 
+
+@router.post("/policy-check", response_model=PolicyCheckResponse)
+async def check_policy_endpoint(request: PaymentRequest, db: AsyncSession = Depends(get_db)):
+    """Check policy (backward compatible)."""
+    result = await execute_tool("check_policy", {}, db, request.session_id)
+    data = json.loads(result)
+
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+
+    return PolicyCheckResponse(
+        allowed=data["allowed"],
+        reason=data["reason"],
+        total=data["cart_total"],
+        limit=data["spending_limit"]
+    )
+
+
 class ApprovalResponse(BaseModel):
-    approval_id: str
     order_id: str
+    approval_id: str
     token: str
     status: str
     message: str
 
-@router.post("/search", response_model=SearchResponse)
-async def search_products(request: SearchRequest, db: AsyncSession = Depends(get_db)):
-    query = select(Product).where(Product.stock > 0)
-    if request.max_price:
-        query = query.where(Product.price <= request.max_price)
-    if request.category:
-        query = query.where(Product.category == request.category)
-    
-    result = await db.execute(query)
-    products = result.scalars().all()
-    
-    products_list = []
-    for p in products:
-        products_list.append({
-            "product_id": p.id,
-            "name": p.name,
-            "description": p.description,
-            "category": p.category,
-            "price": p.price,
-            "currency": p.currency,
-            "stock": p.stock
-        })
-    
-    recommendations = []
-    if products:
-        first_product = products[0]
-        rels_result = await db.execute(
-            select(ProductRelationship).where(ProductRelationship.product_id == first_product.id)
-        )
-        rels = rels_result.scalars().all()
-        for rel in rels:
-            rel_product_result = await db.execute(
-                select(Product).where(Product.id == rel.related_product_id)
-            )
-            rel_product = rel_product_result.scalar_one_or_none()
-            if rel_product and rel_product.stock > 0:
-                recommendations.append({
-                    "product_id": rel_product.id,
-                    "name": rel_product.name,
-                    "price": rel_product.price,
-                    "reason": rel.reason,
-                    "type": rel.relationship_type
-                })
-    
-    return SearchResponse(products=products_list, recommendations=recommendations)
-
-@router.post("/recommend")
-async def recommend_product(request: dict, db: AsyncSession = Depends(get_db)):
-    product_id = request.get("product_id")
-    recommendation_type = request.get("type", "cross-sell")
-    
-    rels_result = await db.execute(
-        select(ProductRelationship).where(
-            ProductRelationship.product_id == product_id,
-            ProductRelationship.relationship_type == recommendation_type
-        )
-    )
-    rels = rels_result.scalars().all()
-    
-    recommendations = []
-    for rel in rels:
-        product_result = await db.execute(
-            select(Product).where(Product.id == rel.related_product_id)
-        )
-        product = product_result.scalar_one_or_none()
-        if product and product.stock > 0:
-            recommendations.append({
-                "product_id": product.id,
-                "name": product.name,
-                "price": product.price,
-                "reason": rel.reason,
-                "type": rel.relationship_type
-            })
-    
-    return {"recommendations": recommendations}
-
-@router.post("/cart", response_model=CartResponse)
-async def create_agent_cart(request: CartRequest, db: AsyncSession = Depends(get_db)):
-    cart = Cart(session_id=request.session_id, total=0)
-    db.add(cart)
-    await db.commit()
-    await db.refresh(cart)
-    
-    items = []
-    total = 0
-    for i, pid in enumerate(request.product_ids):
-        product_result = await db.execute(select(Product).where(Product.id == pid))
-        product = product_result.scalar_one_or_none()
-        if not product or product.stock <= 0:
-            continue
-        
-        qty = request.quantities[i] if i < len(request.quantities) else 1
-        cart_item = CartItem(
-            cart_id=cart.id,
-            product_id=pid,
-            quantity=qty,
-            price_at_time=product.price
-        )
-        db.add(cart_item)
-        items.append({
-            "product_id": pid,
-            "name": product.name,
-            "price": product.price,
-            "quantity": qty,
-            "subtotal": product.price * qty
-        })
-        total += product.price * qty
-    
-    cart.total = total
-    await db.commit()
-    
-    return CartResponse(cart_id=cart.id, items=items, total=total)
-
-@router.post("/policy-check", response_model=PolicyCheckResponse)
-async def check_policy(request: PaymentRequest, db: AsyncSession = Depends(get_db)):
-    cart_result = await db.execute(select(Cart).where(Cart.id == request.cart_id))
-    cart = cart_result.scalar_one_or_none()
-    if not cart:
-        raise HTTPException(status_code=404, detail="Cart not found")
-    
-    policy_result = await db.execute(select(Policy).limit(1))
-    policy = policy_result.scalar_one_or_none()
-    if not policy:
-        policy = Policy(max_transaction_amount=3000, payment_requires_approval=True)
-    
-    if cart.total > policy.max_transaction_amount:
-        return PolicyCheckResponse(
-            allowed=False,
-            reason=f"Transaction amount ₹{cart.total} exceeds spending limit ₹{policy.max_transaction_amount}",
-            total=cart.total,
-            limit=policy.max_transaction_amount
-        )
-    
-    return PolicyCheckResponse(
-        allowed=True,
-        reason="Policy check passed",
-        total=cart.total,
-        limit=policy.max_transaction_amount
-    )
 
 @router.post("/request-approval", response_model=ApprovalResponse)
-async def request_approval(request: PaymentRequest, db: AsyncSession = Depends(get_db)):
-    cart_result = await db.execute(select(Cart).where(Cart.id == request.cart_id))
-    cart = cart_result.scalar_one_or_none()
-    if not cart:
-        raise HTTPException(status_code=404, detail="Cart not found")
-    
-    order = Order(
-        cart_id=cart.id,
-        customer_id=cart.customer_id,
-        merchant_id="default",
-        total=cart.total,
-        status="approval_pending"
-    )
-    db.add(order)
-    await db.commit()
-    await db.refresh(order)
-    
-    token = str(uuid.uuid4())
-    approval = Approval(
-        order_id=order.id,
-        session_id=request.session_id,
-        status="pending",
-        token=token
-    )
-    db.add(approval)
-    await db.commit()
-    await db.refresh(approval)
-    
-    await log_audit(db, request.session_id, "user", "request_approval", 
-                    json.dumps({"cart_id": request.cart_id, "total": cart.total}),
-                    "pending", "approval_requested")
-    
+async def request_approval_endpoint(request: PaymentRequest, db: AsyncSession = Depends(get_db)):
+    """Request approval (backward compatible)."""
+    result = await execute_tool("request_payment_approval", {}, db, request.session_id)
+    data = json.loads(result)
+
+    if "error" in data:
+        raise HTTPException(status_code=400, detail=data["error"])
+
     return ApprovalResponse(
-        approval_id=approval.id,
-        order_id=order.id,
-        token=token,
-        status="pending",
-        message=f"Payment approval requested for ₹{cart.total}"
+        approval_id=data["approval_id"],
+        order_id=data["order_id"],
+        token=data["token"],
+        status=data["status"],
+        message=data["message"]
     )
 
+
 @router.post("/approve/{approval_id}")
-async def approve_payment(approval_id: str, db: AsyncSession = Depends(get_db)):
+async def approve_payment_endpoint(approval_id: str, db: AsyncSession = Depends(get_db)):
+    """Approve payment (backward compatible)."""
+    from models.models import Approval, Order
+
     result = await db.execute(select(Approval).where(Approval.id == approval_id))
     approval = result.scalar_one_or_none()
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
-    
+
+    if approval.status != "pending":
+        raise HTTPException(status_code=400, detail="Approval already processed")
+
     approval.status = "approved"
     approval.approved_by = "user"
-    
+
     order_result = await db.execute(select(Order).where(Order.id == approval.order_id))
     order = order_result.scalar_one_or_none()
     if order:
         order.status = "approved"
-    
+
     await db.commit()
-    
-    await log_audit(db, approval.session_id, "user", "approve_payment",
-                    json.dumps({"approval_id": approval_id}),
-                    "approved", "payment_approved")
-    
+
     return {"status": "approved", "order_id": approval.order_id}
 
-async def log_audit(db: AsyncSession, session_id: str, user: str, action: str, 
-                    input_data: str, decision: str, final_status: str):
-    audit = AuditLog(
-        session_id=session_id,
-        user=user,
-        action=action,
-        input_data=input_data,
-        decision=decision,
-        final_status=final_status,
-        created_at=datetime.now(timezone.utc)
-    )
-    db.add(audit)
-    await db.commit()
+
+# Import for backward-compatible approve endpoint
+from sqlalchemy import select

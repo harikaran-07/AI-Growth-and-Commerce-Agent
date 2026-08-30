@@ -12,8 +12,16 @@ services:
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: AI_PROVIDER
+        value: openai
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gpt-4o-mini
       - key: ALLOWED_ORIGINS
-        value: https://merchantflow-frontend.onrender.com,http://localhost:3000
+        value: https://merchantflow-frontend.onrender.com
 
   - type: web
     name: merchantflow-frontend

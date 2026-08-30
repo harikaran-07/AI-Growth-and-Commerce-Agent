@@ -7,15 +7,16 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env.local
-.env*
+.env
 
 # build output
 .next/
 frontend/.next/
-out/
 dist/
 
 # OS/editor
 .DS_Store
 .vscode/
-frontend/out/
+
+# backend database
+backend/merchantflow.db

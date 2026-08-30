@@ -30,18 +30,7 @@ async def lifespan(app: FastAPI):
     logger.info("Running seed data...")
     try:
         from seed import seed
-        from scripts.seed_catalog import seed as seed_catalog
-        # Check if we need the big catalog
-        from models.database import async_session
-        from sqlalchemy import text
-        async with async_session() as db:
-            result = await db.execute(text("SELECT COUNT(*) FROM products"))
-            count = result.scalar()
-        if count < 100:
-            logger.info(f"Only {count} products, seeding full catalog...")
-            await seed_catalog()
-        else:
-            logger.info(f"Found {count} products, skipping seed")
+        await seed()
     except Exception as e:
         logger.error(f"Seed failed: {e}")
     logger.info("MerchantFlow AI started successfully")
@@ -99,22 +88,26 @@ app.include_router(approvals.router, prefix="/api/approvals", tags=["Approvals"]
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
 
 
-
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "merchantflow"}
+    """Health check with useful system info (no secrets exposed)."""
+    import os
+    gemini_key = os.getenv("GEMINI_API_KEY", os.getenv("AI_API_KEY", ""))
+    razorpay_key = os.getenv("RAZORPAY_KEY_ID", "")
+
+    return {
+        "status": "healthy",
+        "service": "merchantflow",
+        "ai": os.getenv("AI_PROVIDER", "gemini"),
+        "razorpay": "test_mode" if razorpay_key.startswith("rzp_test_") else ("configured" if razorpay_key else "not_configured"),
+        "database": "connected",
+    }
 
 
 # Serve Next.js static frontend
 if os.path.isdir(os.path.join(FRONTEND_DIR, "_next")):
     # Mount _next/static for JS/CSS chunks
     app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="_next_static")
-
-    # Known Next.js static export page paths
-    KNOWN_PAGES = [
-        "", "buyer", "products", "cart", "payments",
-        "audit", "analytics", "settings"
-    ]
 
     @app.get("/{full_path:path}")
     async def serve_frontend(request: Request, full_path: str):
@@ -151,33 +144,3 @@ else:
     @app.get("/")
     async def root():
         return {"message": "MerchantFlow AI - Buildathon API", "version": "1.0.0"}
-
-@app.get("/debug/ai")
-async def debug_ai():
-    """Debug endpoint to check AI configuration."""
-    import os
-    key = os.getenv("GEMINI_API_KEY", os.getenv("AI_API_KEY", ""))
-    model = os.getenv("GEMINI_MODEL", os.getenv("AI_MODEL", "gemini-3.5-flash-lite"))
-    provider = os.getenv("AI_PROVIDER", "gemini")
-    from services.ai_provider import genai, AFC_TOOLS
-    
-    result = {
-        "provider": provider,
-        "model": model,
-        "key_length": len(key) if key else 0,
-        "key_prefix": key[:10] if key else "none",
-        "genai_installed": genai is not None,
-        "tools_count": len(AFC_TOOLS),
-    }
-    
-    # Try a simple Gemini call
-    if key and genai:
-        try:
-            client = genai.Client(api_key=key)
-            resp = client.models.generate_content(model=model, contents="Say hi in 5 words")
-            result["gemini_test"] = "OK"
-            result["gemini_response"] = resp.text[:100] if resp.text else "empty"
-        except Exception as e:
-            result["gemini_test"] = f"FAIL: {type(e).__name__}: {str(e)[:200]}"
-    
-    return result

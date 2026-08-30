@@ -26,7 +26,7 @@ def _get_api_key():
 
 
 def _get_model():
-    return os.getenv("GEMINI_MODEL", os.getenv("AI_MODEL", "gemini-3.5-flash-lite"))
+    return os.getenv("GEMINI_MODEL", os.getenv("AI_MODEL", "gemini-3.6-flash"))
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"

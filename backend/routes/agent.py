@@ -282,3 +282,20 @@ async def approve_payment_endpoint(approval_id: str, db: AsyncSession = Depends(
     await db.commit()
 
     return {"status": "approved", "order_id": approval.order_id}
+
+
+@router.get("/test-gemini")
+async def test_gemini():
+    """Test Gemini API connection."""
+    import os
+    from services.ai_provider import genai
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    key = os.getenv("GEMINI_API_KEY", "")
+    if not key or not genai:
+        return {"error": "No API key or SDK", "key": bool(key), "sdk": bool(genai)}
+    try:
+        client = genai.Client(api_key=key)
+        resp = client.models.generate_content(model=model, contents="Say hello in 3 words")
+        return {"status": "ok", "model": model, "response": resp.text[:100]}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {str(e)[:300]}"}

@@ -299,3 +299,41 @@ async def test_gemini():
         return {"status": "ok", "model": model, "response": resp.text[:100]}
     except Exception as e:
         return {"error": f"{type(e).__name__}: {str(e)[:300]}"}
+
+
+@router.get("/test-afc")
+async def test_afc():
+    """Test AFC (automatic function calling) with a real tool call."""
+    import os
+    from services.ai_provider import genai, set_context, clear_tool_calls_log, get_tool_calls_log, AFC_TOOLS, AGENT_SYSTEM_PROMPT
+    from google.genai import types
+    
+    key = os.getenv("GEMINI_API_KEY", "")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    
+    if not key or not genai:
+        return {"error": "No key/SDK"}
+    
+    try:
+        client = genai.Client(api_key=key)
+        
+        def search_products(query: str, category: str, max_price: float, min_price: float, in_stock: bool) -> str:
+            return '{"products": [{"name": "Test Product", "price": 999}]}'
+        
+        config = types.GenerateContentConfig(
+            system_instruction="You are a shopping assistant. Use search_products tool.",
+            tools=[search_products],
+            temperature=0.7,
+            max_output_tokens=512,
+        )
+        
+        import asyncio
+        def _sync():
+            chat = client.chats.create(model=model, config=config)
+            return chat.send_message("Find headphones under 3000")
+        
+        response = await asyncio.to_thread(_sync)
+        return {"status": "ok", "text": (response.text or "")[:200]}
+    except Exception as e:
+        import traceback
+        return {"error": f"{type(e).__name__}: {str(e)[:300]}", "trace": traceback.format_exc()[:500]}

@@ -30,7 +30,18 @@ async def lifespan(app: FastAPI):
     logger.info("Running seed data...")
     try:
         from seed import seed
-        await seed()
+        from scripts.seed_catalog import seed as seed_catalog
+        # Check if we need the big catalog
+        from models.database import async_session
+        from sqlalchemy import text
+        async with async_session() as db:
+            result = await db.execute(text("SELECT COUNT(*) FROM products"))
+            count = result.scalar()
+        if count < 100:
+            logger.info(f"Only {count} products, seeding full catalog...")
+            await seed_catalog()
+        else:
+            logger.info(f"Found {count} products, skipping seed")
     except Exception as e:
         logger.error(f"Seed failed: {e}")
     logger.info("MerchantFlow AI started successfully")

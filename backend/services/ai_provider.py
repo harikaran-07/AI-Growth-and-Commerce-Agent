@@ -23,7 +23,18 @@ GEMINI_KEY_2 = os.getenv("GEMINI_API_KEY_2", "")
 GEMINI_KEYS = [k for k in [GEMINI_KEY_1, GEMINI_KEY_2] if k and k not in ("your_api_key_here", "placeholder_secret", "")]
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+# Valid Gemini model names: gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro
 GEMINI_MODEL = os.getenv("AI_MODEL", "gemini-2.0-flash")
+
+# Map invalid model names to valid ones
+MODEL_MAP = {
+    "gemini-3.6-flash": "gemini-2.0-flash",
+    "gemini-3.0-flash": "gemini-2.0-flash",
+    "gemini-2.5-flash": "gemini-2.0-flash",
+}
+if GEMINI_MODEL in MODEL_MAP:
+    logger.info(f"Mapping invalid model '{GEMINI_MODEL}' to '{MODEL_MAP[GEMINI_MODEL]}'")
+    GEMINI_MODEL = MODEL_MAP[GEMINI_MODEL]
 
 # Retry config
 MAX_RETRIES = 2

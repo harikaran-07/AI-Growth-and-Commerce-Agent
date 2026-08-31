@@ -412,86 +412,86 @@ async def _call_gemini_with_failover(keys: List[str], messages: List[Dict[str, A
     last_error = None
     
     for model_name in models_to_try:
-      for key_idx, api_key in enumerate(keys):
-        logger.info(f"Trying Gemini model={model_name} key #{key_idx + 1} (...{api_key[-6:]})")
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for iteration in range(MAX_ITERATIONS):
-                try:
-                    url = f"{GEMINI_BASE_URL}/models/{model_name}:generateContent?key={api_key}"
-                    response = await client.post(url, headers={"Content-Type": "application/json"}, json=payload)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                    elif _is_quota_error(response.status_code, response.text):
-                        logger.warning(f"Gemini key #{key_idx+1} exhausted, trying next key...")
-                        _mark_key_exhausted(api_key)
-                        last_error = "quota_exhausted"
-                        break  # Try next key
-                    else:
-                        logger.error(f"Gemini HTTP {response.status_code}: {response.text[:300]}")
-                        # If model not found, try with a valid model
-                        if response.status_code == 404 and 'model' in response.text.lower():
-                            logger.warning(f"Model '{model_name}' not found, will try next model")
-                            last_error = "model_not_found"
-                            break
-                        return {"content": "AI service error. Please try again.", "tool_calls": None}
-                        
-                except httpx.TimeoutException:
-                    logger.warning("Gemini timeout")
-                    last_error = "timeout"
-                    break
-                except Exception as e:
-                    logger.error(f"Gemini request failed: {type(e).__name__}: {e}")
-                    return {"content": "AI service temporarily unavailable. Please try again.", "tool_calls": None}
-                
-                candidates = data.get("candidates", [])
-                if not candidates:
-                    return {"content": "I couldn't generate a response. Please try again.", "tool_calls": None}
-                
-                candidate = candidates[0]
-                parts = candidate.get("content", {}).get("parts", [])
-                function_calls = [p for p in parts if "functionCall" in p]
-                text_parts = [p.get("text", "") for p in parts if "text" in p]
-                
-                if not function_calls:
-                    final_text = "\n".join(text_parts) if text_parts else None
-                    return {"content": final_text, "tool_calls": all_tool_calls if all_tool_calls else None}
-                
-                contents.append({"role": "model", "parts": parts})
-                
-                tool_parts = []
-                for fc in function_calls:
-                    fc_data = fc["functionCall"]
-                    tool_name = fc_data["name"]
-                    tool_args = fc_data.get("args", {})
-                    all_tool_calls.append({"name": tool_name, "arguments": tool_args})
-                    
-                    try:
-                        result_str = await execute_tool(tool_name, tool_args, db, session_id)
-                        result_data = json.loads(result_str) if result_str.strip().startswith(("{", "[")) else {"output": result_str}
-                    except Exception as e:
-                        logger.error(f"Tool {tool_name} failed: {e}")
-                        result_data = {"error": f"Tool execution failed: {str(e)}"}
-                    
-                    tool_parts.append({"functionResponse": {"name": tool_name, "response": result_data}})
-                
-                contents.append({"role": "user", "parts": tool_parts})
-                payload["contents"] = contents
+        model_worked = False
+        for key_idx, api_key in enumerate(keys):
+            logger.info(f"Trying Gemini model={model_name} key #{key_idx + 1} (...{api_key[-6:]})")
             
-            # If we broke out of inner loop with quota error, try next key
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                for iteration in range(MAX_ITERATIONS):
+                    try:
+                        url = f"{GEMINI_BASE_URL}/models/{model_name}:generateContent?key={api_key}"
+                        response = await client.post(url, headers={"Content-Type": "application/json"}, json=payload)
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                        elif _is_quota_error(response.status_code, response.text):
+                            logger.warning(f"Gemini key #{key_idx+1} exhausted, trying next key...")
+                            _mark_key_exhausted(api_key)
+                            last_error = "quota_exhausted"
+                            break
+                        else:
+                            logger.error(f"Gemini HTTP {response.status_code}: {response.text[:300]}")
+                            if response.status_code == 404 and 'model' in response.text.lower():
+                                logger.warning(f"Model '{model_name}' not found, will try next model")
+                                last_error = "model_not_found"
+                                break
+                            return {"content": "AI service error. Please try again.", "tool_calls": None}
+                            
+                    except httpx.TimeoutException:
+                        logger.warning("Gemini timeout")
+                        last_error = "timeout"
+                        break
+                    except Exception as e:
+                        logger.error(f"Gemini request failed: {type(e).__name__}: {e}")
+                        return {"content": "AI service temporarily unavailable. Please try again.", "tool_calls": None}
+                    
+                    candidates = data.get("candidates", [])
+                    if not candidates:
+                        return {"content": "I couldn't generate a response. Please try again.", "tool_calls": None}
+                    
+                    candidate = candidates[0]
+                    parts = candidate.get("content", {}).get("parts", [])
+                    function_calls = [p for p in parts if "functionCall" in p]
+                    text_parts = [p.get("text", "") for p in parts if "text" in p]
+                    
+                    if not function_calls:
+                        final_text = "\n".join(text_parts) if text_parts else None
+                        return {"content": final_text, "tool_calls": all_tool_calls if all_tool_calls else None}
+                    
+                    contents.append({"role": "model", "parts": parts})
+                    
+                    tool_parts = []
+                    for fc in function_calls:
+                        fc_data = fc["functionCall"]
+                        tool_name = fc_data["name"]
+                        tool_args = fc_data.get("args", {})
+                        all_tool_calls.append({"name": tool_name, "arguments": tool_args})
+                        
+                        try:
+                            result_str = await execute_tool(tool_name, tool_args, db, session_id)
+                            result_data = json.loads(result_str) if result_str.strip().startswith(("{", "[")) else {"output": result_str}
+                        except Exception as e:
+                            logger.error(f"Tool {tool_name} failed: {e}")
+                            result_data = {"error": f"Tool execution failed: {str(e)}"}
+                        
+                        tool_parts.append({"functionResponse": {"name": tool_name, "response": result_data}})
+                    
+                    contents.append({"role": "user", "parts": tool_parts})
+                    payload["contents"] = contents
+            
+            # Check if we should try next key
             if last_error == "quota_exhausted":
                 last_error = None
                 continue
-            # If model not found, try next model
             if last_error == "model_not_found":
                 last_error = None
                 continue
+            # Success or other error - stop trying keys for this model
+            model_worked = True
             break
-      else:
-        # All keys exhausted for this model, try next model
-        continue
-      break  # Success with this model+key combination
+        
+        if model_worked:
+            break  # Success with this model+key combination
     
     # All keys failed
     if last_error == "quota_exhausted":

@@ -373,6 +373,11 @@ async def _call_gemini_with_failover(keys: List[str], messages: List[Dict[str, A
     
     model = GEMINI_MODEL
     
+    # Try primary model, fallback to gemini-2.0-flash if it fails
+    models_to_try = [model]
+    if model != "gemini-2.0-flash":
+        models_to_try.append("gemini-2.0-flash")
+    
     # Convert OpenAI tool format to Gemini format
     gemini_tools = []
     for tool in TOOL_DEFINITIONS:
@@ -406,13 +411,14 @@ async def _call_gemini_with_failover(keys: List[str], messages: List[Dict[str, A
     
     last_error = None
     
-    for key_idx, api_key in enumerate(keys):
-        logger.info(f"Trying Gemini key #{key_idx + 1} (...{api_key[-6:]})")
+    for model_name in models_to_try:
+      for key_idx, api_key in enumerate(keys):
+        logger.info(f"Trying Gemini model={model_name} key #{key_idx + 1} (...{api_key[-6:]})")
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             for iteration in range(MAX_ITERATIONS):
                 try:
-                    url = f"{GEMINI_BASE_URL}/models/{model}:generateContent?key={api_key}"
+                    url = f"{GEMINI_BASE_URL}/models/{model_name}:generateContent?key={api_key}"
                     response = await client.post(url, headers={"Content-Type": "application/json"}, json=payload)
                     
                     if response.status_code == 200:
@@ -423,7 +429,12 @@ async def _call_gemini_with_failover(keys: List[str], messages: List[Dict[str, A
                         last_error = "quota_exhausted"
                         break  # Try next key
                     else:
-                        logger.error(f"Gemini HTTP {response.status_code}")
+                        logger.error(f"Gemini HTTP {response.status_code}: {response.text[:300]}")
+                        # If model not found, try with a valid model
+                        if response.status_code == 404 and 'model' in response.text.lower():
+                            logger.warning(f"Model '{model_name}' not found, will try next model")
+                            last_error = "model_not_found"
+                            break
                         return {"content": "AI service error. Please try again.", "tool_calls": None}
                         
                 except httpx.TimeoutException:
@@ -472,7 +483,15 @@ async def _call_gemini_with_failover(keys: List[str], messages: List[Dict[str, A
             if last_error == "quota_exhausted":
                 last_error = None
                 continue
+            # If model not found, try next model
+            if last_error == "model_not_found":
+                last_error = None
+                continue
             break
+      else:
+        # All keys exhausted for this model, try next model
+        continue
+      break  # Success with this model+key combination
     
     # All keys failed
     if last_error == "quota_exhausted":

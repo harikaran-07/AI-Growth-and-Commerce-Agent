@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { sanitizeProductName, formatPrice, formatNumber } from './utils'
 
 interface DashboardData {
   total_revenue: number
@@ -84,8 +85,8 @@ export default function Dashboard() {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Merchant Overview</h1>
-            <p className="text-dark-400 mt-1 text-sm">AI-Powered Growth Analytics</p>
+            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-dark-400 mt-1 text-sm">AI Growth and Commerce Agent — Commerce Intelligence</p>
           </div>
           <button onClick={fetchData} className="btn-secondary text-xs">
             ↻ Refresh
@@ -235,7 +236,7 @@ export default function Dashboard() {
                     #{i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-dark-100 truncate">{p.name}</p>
+                    <p className="text-sm font-medium text-dark-100 truncate">{sanitizeProductName(p.name)}</p>
                     <p className="text-xs text-dark-400">{p.sales} sales · {p.stock} stock</p>
                   </div>
                   <span className="text-sm font-semibold text-emerald-400">₹{p.revenue.toLocaleString()}</span>
@@ -289,7 +290,7 @@ export default function Dashboard() {
                     #{i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-dark-100 truncate">{p.name}</p>
+                    <p className="text-sm font-medium text-dark-100 truncate">{sanitizeProductName(p.name)}</p>
                     <p className="text-xs text-dark-400">{p.category} · {p.stock} stock</p>
                   </div>
                   <div className="text-right">
@@ -313,7 +314,7 @@ export default function Dashboard() {
                     ⚠
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-dark-100 truncate">{p.name}</p>
+                    <p className="text-sm font-medium text-dark-100 truncate">{sanitizeProductName(p.name)}</p>
                     <p className="text-xs text-dark-400">{p.category}</p>
                   </div>
                   <div className="text-right">
@@ -339,7 +340,7 @@ export default function Dashboard() {
                     {p.stock}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-dark-100 truncate">{p.name}</p>
+                    <p className="text-sm font-medium text-dark-100 truncate">{sanitizeProductName(p.name)}</p>
                     <p className="text-xs text-dark-400">{p.category} · {p.sales} sold</p>
                   </div>
                   <span className={`text-xs font-medium ${p.stock <= 3 ? 'text-red-400' : 'text-amber-400'}`}>

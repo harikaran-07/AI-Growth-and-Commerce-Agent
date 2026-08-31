@@ -1,5 +1,5 @@
 """
-Seed script: 10,000+ real products across many categories for MerchantFlow AI.
+Seed script: 10,000+ real products across many categories for AI Growth and Commerce Agent.
 Includes cost_price, sales, revenue, margin for each product.
 """
 import uuid
@@ -583,7 +583,7 @@ async def seed():
 
         # Sample notifications
         sample_notifs = [
-            ("Welcome to MerchantFlow AI", "Your AI-powered commerce platform is ready.", "info"),
+            ("Welcome to AI Growth and Commerce Agent", "Your AI-powered commerce platform is ready.", "info"),
             ("Low Stock Alert", "Some products are running low on stock. Check inventory.", "warning"),
             ("System Ready", "All systems operational. AI pricing engine active.", "success"),
         ]

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { sanitizeProductName, formatPrice } from '../utils'
 
 interface Message {
   id: string; role: 'user' | 'assistant'; content: string;
@@ -31,16 +32,16 @@ interface ChatResponse {
 }
 
 const SUGGESTIONS = [
-  "Show today's top products",
-  "Which products have the highest margin?",
-  "Find laptops under ₹80,000",
-  "Show low stock products",
-  "Which products are selling fastest?",
-  "How much revenue did I generate?",
   "Find wireless headphones",
-  "Recommend products for programming",
-  "What should I restock?",
-  "Compare smartphones under ₹50,000",
+  "I need a phone under ₹30,000",
+  "Show me laptops for programming",
+  "Find accessories for my phone",
+  "What's on sale today?",
+  "I want something with a good camera",
+  "Find the best deals under ₹5,000",
+  "Show me trending products",
+  "I need a gift for someone",
+  "Compare wireless earbuds",
 ]
 
 export default function BuyerPage() {
@@ -144,7 +145,7 @@ export default function BuyerPage() {
             <h1 className="text-lg font-bold text-white flex items-center gap-2">
               <span className="text-purple-400">🤖</span> AI Assistant
             </h1>
-            <p className="text-xs text-dark-400">Powered by LLM Agent with tool calling</p>
+            <p className="text-xs text-dark-400">Your personal shopping assistant</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="badge-success">AI AGENT</span>
@@ -159,9 +160,8 @@ export default function BuyerPage() {
           <div className="text-center py-12 max-w-lg mx-auto">
             <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <span className="text-4xl">🤖</span>
-            </div>
-            <h2 className="text-xl font-bold text-white mb-2">MerchantFlow AI Assistant</h2>
-            <p className="text-dark-400 text-sm mb-6">Ask me about your products, inventory, revenue, or let me help you shop. I use real merchant data.</p>
+            </div>              <h2 className="text-xl font-bold text-white mb-2">AI Commerce Assistant</h2>
+            <p className="text-dark-400 text-sm mb-6">I can help you find products, compare options, and place orders. Just tell me what you're looking for!</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {SUGGESTIONS.map(s => (
                 <button key={s} onClick={() => handleSend(s)}
@@ -188,7 +188,7 @@ export default function BuyerPage() {
                         <span className="text-xs font-bold text-primary-400">#{p.position}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-white truncate">{p.name}</p>
+                        <p className="font-medium text-sm text-white truncate">{sanitizeProductName(p.name)}</p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs font-bold text-primary-400">₹{p.price.toLocaleString()}</span>
                           <span className="text-[10px] text-dark-400">{p.category}</span>
@@ -212,7 +212,7 @@ export default function BuyerPage() {
                   {msg.recommendations.map(r => (
                     <div key={r.product_id} className="flex items-center justify-between py-1.5">
                       <div>
-                        <span className="text-sm text-dark-100">{r.name}</span>
+                        <span className="text-sm text-dark-100">{sanitizeProductName(r.name)}</span>
                         <span className="text-xs text-dark-400 ml-2">₹{r.price.toLocaleString()}</span>
                         {r.reason && <p className="text-[10px] text-primary-400/80">{r.reason}</p>}
                       </div>
@@ -280,7 +280,7 @@ export default function BuyerPage() {
           <button onClick={() => handleSend()} disabled={loading || !input.trim()}
             className="btn-primary px-6">{loading ? '...' : 'Send'}</button>
         </div>
-        <p className="text-[10px] text-dark-500 text-center mt-2">AI Agent · Real Merchant Data · Razorpay Test Mode</p>
+        <p className="text-[10px] text-dark-500 text-center mt-2">AI Growth & Commerce Agent · Shopping Assistant</p>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { sanitizeProductName } from '../utils'
 
 interface OrderItem {
   id: string; product_id: string; product_name: string; quantity: number; price: number; subtotal: number;
@@ -146,7 +147,7 @@ export default function OrdersPage() {
                 {selectedOrder.items?.map(item => (
                   <div key={item.id} className="flex items-center justify-between bg-dark-700/50 rounded p-2.5">
                     <div>
-                      <p className="text-sm text-dark-100">{item.product_name}</p>
+                      <p className="text-sm text-dark-100">{sanitizeProductName(item.product_name)}</p>
                       <p className="text-xs text-dark-400">₹{item.price.toLocaleString()} × {item.quantity}</p>
                     </div>
                     <span className="text-sm font-semibold text-white">₹{item.subtotal.toLocaleString()}</span>

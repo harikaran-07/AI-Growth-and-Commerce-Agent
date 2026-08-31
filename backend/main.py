@@ -1,5 +1,5 @@
 """
-MerchantFlow AI - Main Application
+AI Growth and Commerce Agent - Main Application
 AI Growth & Agentic Commerce Agent for Razorpay Buildathon
 
 Unified deployment: serves both the API and the frontend.
@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 from models.database import engine, Base, init_db
 from routes import products, carts, payments, agent, audit, analytics, policies, approvals, webhooks
-from routes import orders, notifications, pricing
+from routes import orders, notifications, pricing, synthetic
 import os
 import logging
 import json
@@ -45,13 +45,13 @@ async def lifespan(app: FastAPI):
         logger.error(f"Seed failed: {e}")
         import traceback
         traceback.print_exc()
-    logger.info("MerchantFlow AI started successfully")
+    logger.info("AI Growth and Commerce Agent started successfully")
     yield
-    logger.info("MerchantFlow AI shutting down")
+    logger.info("AI Growth and Commerce Agent shutting down")
 
 
 app = FastAPI(
-    title="MerchantFlow AI",
+    title="AI Growth and Commerce Agent",
     description="AI Growth & Agentic Commerce Agent for Razorpay Buildathon",
     version="2.0.0",
     lifespan=lifespan
@@ -95,6 +95,7 @@ app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
 app.include_router(orders.router, prefix="/api/orders", tags=["Orders"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(pricing.router, prefix="/api/pricing", tags=["Pricing"])
+app.include_router(synthetic.router, prefix="/api", tags=["Synthetic Data"])
 
 
 @app.get("/health")
@@ -144,8 +145,8 @@ if os.path.isdir(os.path.join(FRONTEND_DIR, "_next")):
         root_index = os.path.join(FRONTEND_DIR, "index.html")
         if os.path.isfile(root_index):
             return FileResponse(root_index, status_code=404)
-        return {"message": "MerchantFlow AI - Buildathon API", "version": "2.0.0"}
+        return {"message": "AI Growth and Commerce Agent", "version": "2.0.0"}
 else:
     @app.get("/")
     async def root():
-        return {"message": "MerchantFlow AI - Buildathon API", "version": "2.0.0"}
+        return {"message": "AI Growth and Commerce Agent", "version": "2.0.0"}

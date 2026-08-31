@@ -3,8 +3,8 @@ import './globals.css'
 import Sidebar from '@/components/Sidebar'
 
 export const metadata: Metadata = {
-  title: 'MerchantFlow AI - Intelligent Commerce Platform',
-  description: 'AI Growth & Agentic Commerce Agent powered by Razorpay',
+  title: 'AI Growth and Commerce Agent',
+  description: 'AI-powered commerce intelligence platform',
 }
 
 export default function RootLayout({

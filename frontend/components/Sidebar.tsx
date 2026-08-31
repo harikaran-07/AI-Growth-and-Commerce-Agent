@@ -12,6 +12,7 @@ const navItems = [
   { href: '/orders', label: 'Orders', icon: '📋', color: 'text-emerald-400' },
   { href: '/payments', label: 'Payments', icon: '💳', color: 'text-green-400' },
   { href: '/analytics', label: 'Analytics', icon: '📈', color: 'text-pink-400' },
+  { href: '/growth', label: 'Growth & Investment', icon: '🚀', color: 'text-violet-400' },
   { href: '/audit', label: 'Audit Trail', icon: '🔍', color: 'text-orange-400' },
   { href: '/settings', label: 'Settings', icon: '⚙️', color: 'text-gray-400' },
 ]
@@ -42,8 +43,8 @@ export default function Sidebar() {
             <span className="text-white font-bold text-lg">M</span>
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white leading-tight">MerchantFlow</h1>
-            <p className="text-[10px] text-dark-400 uppercase tracking-wider">AI Platform</p>
+            <h1 className="text-lg font-bold text-white leading-tight">AI Growth</h1>
+            <p className="text-[10px] text-dark-400 uppercase tracking-wider">Commerce Agent</p>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { sanitizeProductName, formatPrice } from '../utils'
 
 interface Product {
   id: string; name: string; description: string; category: string; subcategory: string;
@@ -169,7 +170,7 @@ export default function ProductsPage() {
               </div>
 
               <div className="flex items-start justify-between mb-1">
-                <h3 className="font-semibold text-white text-sm leading-tight flex-1 truncate">{product.name}</h3>
+                <h3 className="font-semibold text-white text-sm leading-tight flex-1 truncate">{sanitizeProductName(product.name)}</h3>
                 {product.stock > 0 ? (
                   <span className="badge-success text-[10px] ml-2 flex-shrink-0">{product.stock}</span>
                 ) : (
@@ -229,7 +230,7 @@ export default function ProductsPage() {
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h2 className="text-xl font-bold text-white">{selectedProduct.name}</h2>
+                  <h2 className="text-xl font-bold text-white">{sanitizeProductName(selectedProduct.name)}</h2>
                   <p className="text-sm text-dark-400">{selectedProduct.brand} · {selectedProduct.sku}</p>
                 </div>
                 <button onClick={() => setSelectedProduct(null)} className="text-dark-400 hover:text-white text-xl">✕</button>

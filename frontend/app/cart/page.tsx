@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { sanitizeProductName, formatPrice } from '../utils'
 
 interface CartItem {
   id: string; product_id: string; product_name: string;
@@ -156,7 +157,7 @@ export default function CartPage() {
           key: data.key_id,
           amount: data.amount,
           currency: data.currency,
-          name: 'MerchantFlow AI',
+          name: 'AI Growth & Commerce',
           description: `Order #${orderResult!.id.slice(0, 8)}`,
           order_id: data.razorpay_order_id,
           handler: async (response: any) => {
@@ -344,7 +345,7 @@ export default function CartPage() {
                     <span className="text-2xl">📦</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-white text-sm truncate">{item.product_name}</h3>
+                    <h3 className="font-medium text-white text-sm truncate">{sanitizeProductName(item.product_name)}</h3>
                     <p className="text-xs text-dark-400">₹{item.price_at_time.toLocaleString()} each</p>
                   </div>
                   <div className="flex items-center gap-2">

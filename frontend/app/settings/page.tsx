@@ -73,7 +73,7 @@ export default function SettingsPage() {
         <div className="space-y-3">
           <div>
             <label className="text-xs text-dark-400 mb-1 block">Store Name</label>
-            <input type="text" defaultValue="TechZone Electronics" className="input" disabled />
+            <input type="text" defaultValue="AI Growth & Commerce Agent" className="input" disabled />
           </div>
           <div>
             <label className="text-xs text-dark-400 mb-1 block">Email</label>

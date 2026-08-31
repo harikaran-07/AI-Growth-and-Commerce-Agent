@@ -15,23 +15,48 @@ interface DashboardData {
   recent_orders: { id: string; total: number; status: string; created_at: string }[]
   top_products: { name: string; revenue: number; sales: number; stock: number }[]
   notifications_count: number
+  pending_orders: number
+  completed_orders: number
+  cancelled_orders: number
+  total_customers: number
+  best_sellers: { name: string; sales: number; revenue: number; category: string; stock: number }[]
+  slow_movers: { name: string; sales: number; stock: number; category: string }[]
+  low_stock_list: { name: string; stock: number; category: string; sales: number }[]
+  category_revenue: { category: string; revenue: number; sales: number }[]
+  profit_analytics: { revenue: number; cogs: number; gross_profit: number; margin: number; has_cost_data: boolean }
 }
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [chartPeriod, setChartPeriod] = useState('30d')
+  const [chartData, setChartData] = useState<{ label: string; revenue: number; orders: number }[]>([])
 
   useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    if (data) fetchChartData()
+  }, [chartPeriod, data])
 
   const fetchData = async () => {
     try {
       const res = await fetch('/api/analytics/dashboard')
       const d = await res.json()
       setData(d)
+      setChartData(d.revenue_chart || [])
     } catch (e) {
       console.error('Failed to fetch dashboard')
     } finally { setLoading(false) }
+  }
+
+  const fetchChartData = async () => {
+    try {
+      const res = await fetch(`/api/analytics/revenue-chart?period=${chartPeriod}`)
+      const d = await res.json()
+      setChartData(d || [])
+    } catch (e) {
+      console.error('Failed to fetch chart data')
+    }
   }
 
   if (loading) {
@@ -50,7 +75,7 @@ export default function Dashboard() {
     )
   }
 
-  const chart = data?.revenue_chart || []
+  const chart = chartData
   const maxRev = Math.max(...chart.map(c => c.revenue), 1)
 
   return (
@@ -60,7 +85,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Merchant Overview</h1>
-            <p className="text-dark-400 mt-1 text-sm">TechZone Electronics — AI-Powered Growth Analytics</p>
+            <p className="text-dark-400 mt-1 text-sm">AI-Powered Growth Analytics</p>
           </div>
           <button onClick={fetchData} className="btn-secondary text-xs">
             ↻ Refresh
@@ -74,15 +99,15 @@ export default function Dashboard() {
           title="Total Revenue"
           value={`₹${(data?.total_revenue || 0).toLocaleString()}`}
           icon="💰"
-          trend="+12.5%"
-          trendUp
+          trend={data?.completed_orders ? `${data.completed_orders} completed orders` : "No orders yet"}
+          trendUp={data ? data.total_revenue > 0 : false}
           color="emerald"
         />
         <MetricCard
           title="Orders"
           value={data?.total_orders || 0}
           icon="📦"
-          trend={`${data?.total_orders || 0} total`}
+          trend={`${data?.pending_orders || 0} pending`}
           color="blue"
         />
         <MetricCard
@@ -104,10 +129,43 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricCard title="Products Sold" value={data?.products_sold || 0} icon="🏷️" color="cyan" />
-        <MetricCard title="Low Stock" value={data?.low_stock_products || 0} icon="⚠️" color={data && data.low_stock_products > 10 ? "red" : "amber"} />
+        <MetricCard
+          title="Low Stock"
+          value={data?.low_stock_products || 0}
+          icon="⚠️"
+          color={data && data.low_stock_products > 10 ? "red" : "amber"}
+        />
         <MetricCard title="Conversion" value={`${data?.conversion_rate || 0}%`} icon="🎯" color="pink" />
-        <MetricCard title="Notifications" value={data?.notifications_count || 0} icon="🔔" color="orange" />
+        <MetricCard title="Customers" value={data?.total_customers || 0} icon="👥" color="orange" />
       </div>
+
+      {/* Profit Analytics */}
+      {data?.profit_analytics && (
+        <div className="card p-5 mb-6">
+          <h3 className="text-sm font-semibold text-white mb-4">Profit Analytics</h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-dark-700/50 rounded-lg p-3">
+              <p className="text-[10px] text-dark-400 mb-1">Revenue</p>
+              <p className="text-lg font-bold text-emerald-400">₹{(data.profit_analytics.revenue || 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-dark-700/50 rounded-lg p-3">
+              <p className="text-[10px] text-dark-400 mb-1">COGS</p>
+              <p className="text-lg font-bold text-amber-400">₹{(data.profit_analytics.cogs || 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-dark-700/50 rounded-lg p-3">
+              <p className="text-[10px] text-dark-400 mb-1">Gross Profit</p>
+              <p className="text-lg font-bold text-primary-400">₹{(data.profit_analytics.gross_profit || 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-dark-700/50 rounded-lg p-3">
+              <p className="text-[10px] text-dark-400 mb-1">Profit Margin</p>
+              <p className="text-lg font-bold text-cyan-400">{(data.profit_analytics.margin || 0).toFixed(1)}%</p>
+            </div>
+          </div>
+          {!data.profit_analytics.has_cost_data && (
+            <p className="text-xs text-amber-400 mt-3">⚠️ Cost data unavailable for some products. Profit calculations may be incomplete.</p>
+          )}
+        </div>
+      )}
 
       {/* Revenue Chart */}
       <div className="card p-5 mb-6">
@@ -129,30 +187,39 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-        <div className="flex items-end gap-1 h-48">
-          {chart.slice(-30).map((point, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
-              <div className="absolute bottom-full mb-2 hidden group-hover:block bg-dark-800 border border-dark-600 rounded px-2 py-1 text-[10px] text-dark-200 whitespace-nowrap z-10">
-                {point.label}: ₹{point.revenue.toLocaleString()}
-              </div>
-              <div
-                className="w-full bg-gradient-to-t from-primary-600 to-primary-400 rounded-t-sm transition-all duration-300 hover:from-primary-500 hover:to-primary-300"
-                style={{
-                  height: `${Math.max((point.revenue / maxRev) * 100, 2)}%`,
-                  minHeight: '2px',
-                }}
-              />
+        {chart.length === 0 || chart.every(c => c.revenue === 0) ? (
+          <div className="text-center py-12">
+            <p className="text-dark-400 text-sm">No sales data available for this period.</p>
+            <p className="text-dark-500 text-xs mt-1">Complete some orders to see revenue trends.</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-end gap-1 h-48">
+              {chart.slice(-30).map((point, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+                  <div className="absolute bottom-full mb-2 hidden group-hover:block bg-dark-800 border border-dark-600 rounded px-2 py-1 text-[10px] text-dark-200 whitespace-nowrap z-10">
+                    {point.label}: ₹{point.revenue.toLocaleString()}
+                  </div>
+                  <div
+                    className="w-full bg-gradient-to-t from-primary-600 to-primary-400 rounded-t-sm transition-all duration-300 hover:from-primary-500 hover:to-primary-300"
+                    style={{
+                      height: `${Math.max((point.revenue / maxRev) * 100, 2)}%`,
+                      minHeight: '2px',
+                    }}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="flex justify-between mt-2 text-[10px] text-dark-500">
-          {chart.length > 0 && (
-            <>
-              <span>{chart[0]?.label}</span>
-              <span>{chart[chart.length - 1]?.label}</span>
-            </>
-          )}
-        </div>
+            <div className="flex justify-between mt-2 text-[10px] text-dark-500">
+              {chart.length > 0 && (
+                <>
+                  <span>{chart[0]?.label}</span>
+                  <span>{chart[chart.length - 1]?.label}</span>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Bottom Grid */}
@@ -210,6 +277,105 @@ export default function Dashboard() {
             <p className="text-sm text-dark-400 text-center py-6">No orders yet — make a test purchase!</p>
           )}
         </div>
+
+        {/* Best Sellers */}
+        {data?.best_sellers && data.best_sellers.length > 0 && (
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-white mb-4">🚀 Best Sellers</h3>
+            <div className="space-y-3">
+              {data.best_sellers.map((p, i) => (
+                <div key={i} className="flex items-center gap-3 p-2.5 bg-dark-700/50 rounded-lg">
+                  <div className="w-8 h-8 rounded bg-emerald-600/20 flex items-center justify-center text-emerald-400 text-xs font-bold">
+                    #{i + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-dark-100 truncate">{p.name}</p>
+                    <p className="text-xs text-dark-400">{p.category} · {p.stock} stock</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-emerald-400">{p.sales} sold</p>
+                    <p className="text-[10px] text-dark-400">₹{p.revenue.toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Slow Movers */}
+        {data?.slow_movers && data.slow_movers.length > 0 && (
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-white mb-4">🐢 Slow Movers</h3>
+            <div className="space-y-3">
+              {data.slow_movers.map((p, i) => (
+                <div key={i} className="flex items-center gap-3 p-2.5 bg-dark-700/50 rounded-lg">
+                  <div className="w-8 h-8 rounded bg-amber-600/20 flex items-center justify-center text-amber-400 text-xs font-bold">
+                    ⚠
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-dark-100 truncate">{p.name}</p>
+                    <p className="text-xs text-dark-400">{p.category}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-amber-400">{p.sales} sold</p>
+                    <p className="text-[10px] text-dark-400">{p.stock} in stock</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Low Stock */}
+        {data?.low_stock_list && data.low_stock_list.length > 0 && (
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-white mb-4">⚠️ Low Stock Alert</h3>
+            <div className="space-y-3">
+              {data.low_stock_list.map((p, i) => (
+                <div key={i} className="flex items-center gap-3 p-2.5 bg-dark-700/50 rounded-lg">
+                  <div className={`w-8 h-8 rounded flex items-center justify-center text-xs font-bold ${
+                    p.stock <= 3 ? 'bg-red-600/20 text-red-400' : 'bg-amber-600/20 text-amber-400'
+                  }`}>
+                    {p.stock}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-dark-100 truncate">{p.name}</p>
+                    <p className="text-xs text-dark-400">{p.category} · {p.sales} sold</p>
+                  </div>
+                  <span className={`text-xs font-medium ${p.stock <= 3 ? 'text-red-400' : 'text-amber-400'}`}>
+                    {p.stock <= 3 ? 'Critical' : 'Low'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Category Revenue */}
+        {data?.category_revenue && data.category_revenue.length > 0 && (
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-white mb-4">📊 Revenue by Category</h3>
+            <div className="space-y-3">
+              {data.category_revenue.map((cat, i) => {
+                const maxCatRev = Math.max(...data.category_revenue.map(c => c.revenue), 1)
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-dark-300">{cat.category}</span>
+                      <span className="text-white font-medium">₹{cat.revenue.toLocaleString()}</span>
+                    </div>
+                    <div className="w-full bg-dark-700 rounded-full h-1.5">
+                      <div
+                        className="bg-primary-500 h-1.5 rounded-full transition-all"
+                        style={{ width: `${Math.max((cat.revenue / maxCatRev) * 100, 2)}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

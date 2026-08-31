@@ -61,6 +61,18 @@ class CheckoutRequest(BaseModel):
     customer_address: Optional[str] = ""
     discount: float = 0
 
+    class Config:
+        # Validate fields
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_123",
+                "customer_name": "John Doe",
+                "customer_email": "john@example.com",
+                "customer_phone": "+919876543210",
+                "customer_address": "123 Main St, City"
+            }
+        }
+
 
 @router.get("/", response_model=OrderListResponse)
 async def list_orders(
@@ -197,9 +209,26 @@ async def get_order(order_id: str, db: AsyncSession = Depends(get_db)):
     )
 
 
+def _validate_checkout_fields(request: CheckoutRequest):
+    """Validate all checkout fields."""
+    errors = []
+    if not request.customer_name or not request.customer_name.strip():
+        errors.append("Full name is required")
+    if not request.customer_email or "@" not in request.customer_email:
+        errors.append("Valid email is required")
+    if not request.session_id:
+        errors.append("Session is required")
+    return errors
+
+
 @router.post("/checkout", response_model=OrderResponse)
 async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db)):
-    """Create an order from the current cart."""
+    """Create an order from the current cart with full validation."""
+    # Validate input fields
+    validation_errors = _validate_checkout_fields(request)
+    if validation_errors:
+        raise HTTPException(status_code=400, detail="; ".join(validation_errors))
+
     # Find the active cart for this session
     cart_result = await db.execute(
         select(Cart).where(Cart.session_id == request.session_id, Cart.status == "active")
@@ -208,20 +237,23 @@ async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db))
     if not cart:
         raise HTTPException(status_code=404, detail="No active cart found")
 
-    # Get cart items
+    # Get cart items with product details
     items_result = await db.execute(
         select(CartItem, Product).join(Product, CartItem.product_id == Product.id).where(CartItem.cart_id == cart.id)
     )
     rows = items_result.all()
     if not rows:
-        raise HTTPException(status_code=400, detail="Cart is empty")
+        raise HTTPException(status_code=400, detail="Cart is empty. Add products before checkout.")
 
-    # Validate stock and calculate totals server-side
+    # Validate stock and calculate totals SERVER-SIDE
+    # Never trust price/quantity from browser
     subtotal = 0
     order_items = []
     for ci, p in rows:
+        # Re-verify stock from database
         if p.stock < ci.quantity:
             raise HTTPException(status_code=400, detail=f"Insufficient stock for {p.name}. Only {p.stock} available.")
+        # Use server-side price, never client price
         item_subtotal = p.price * ci.quantity
         subtotal += item_subtotal
         order_items.append({
@@ -232,8 +264,12 @@ async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db))
             "subtotal": item_subtotal,
         })
 
-    # Calculate tax (18% GST) and shipping
-    discount = min(request.discount, subtotal * 0.1)  # Max 10% discount
+    # Validate price integrity
+    if subtotal <= 0:
+        raise HTTPException(status_code=400, detail="Order total must be greater than zero")
+
+    # Calculate tax (18% GST) and shipping server-side
+    discount = min(request.discount, subtotal * 0.1) if request.discount else 0  # Max 10% discount
     taxable = subtotal - discount
     tax = round(taxable * 0.18, 2)
     shipping = 0 if subtotal >= 500 else 49.0
@@ -242,10 +278,10 @@ async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db))
     # Create order
     order = Order(
         cart_id=cart.id,
-        customer_name=request.customer_name,
-        customer_email=request.customer_email,
-        customer_phone=request.customer_phone,
-        customer_address=request.customer_address,
+        customer_name=request.customer_name.strip(),
+        customer_email=request.customer_email.strip().lower(),
+        customer_phone=(request.customer_phone or "").strip(),
+        customer_address=(request.customer_address or "").strip(),
         subtotal=subtotal,
         discount=discount,
         tax=tax,
@@ -273,6 +309,19 @@ async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db))
 
     # Mark cart as completed
     cart.status = "completed"
+    await db.commit()
+
+    # Create audit log
+    from models.models import AuditLog
+    audit = AuditLog(
+        action="ORDER_CREATED",
+        description=f"Order {order.id} created from cart {cart.id}, total: {total}",
+        event_type="order",
+        related_entity=order.id,
+        financial_impact=total,
+        final_status="pending",
+    )
+    db.add(audit)
     await db.commit()
 
     return OrderResponse(

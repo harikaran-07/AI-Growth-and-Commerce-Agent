@@ -76,9 +76,37 @@ export default function CartPage() {
     } catch (e) { console.error('Clear failed') }
   }
 
+  const formatApiError = (error: any): string => {
+    if (typeof error === 'string') return error
+    if (error?.message) return error.message
+    if (error?.detail) {
+      if (typeof error.detail === 'string') return error.detail
+      if (Array.isArray(error.detail)) {
+        return error.detail.map((e: any) => e.msg || e.message || String(e)).join('; ')
+      }
+      if (typeof error.detail === 'object') return JSON.stringify(error.detail)
+    }
+    if (typeof error === 'object') {
+      try {
+        const str = JSON.stringify(error)
+        if (str === '{}') return 'An unknown error occurred. Please try again.'
+        return str
+      } catch { return 'An unknown error occurred.' }
+    }
+    return 'Checkout failed. Please try again.'
+  }
+
   const handleCheckout = async () => {
-    if (!checkoutData.name || !checkoutData.email) {
-      setPaymentError('Please fill in name and email')
+    if (!checkoutData.name || !checkoutData.name.trim()) {
+      setPaymentError('Please enter your full name')
+      return
+    }
+    if (!checkoutData.email || !checkoutData.email.includes('@')) {
+      setPaymentError('Please enter a valid email address')
+      return
+    }
+    if (!cart || cart.items.length === 0) {
+      setPaymentError('Your cart is empty')
       return
     }
     setProcessing(true)
@@ -86,17 +114,23 @@ export default function CartPage() {
     try {
       const res = await fetch('/api/orders/checkout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, ...checkoutData }),
+        body: JSON.stringify({
+          session_id: sessionId,
+          customer_name: checkoutData.name.trim(),
+          customer_email: checkoutData.email.trim(),
+          customer_phone: checkoutData.phone.trim(),
+          customer_address: checkoutData.address.trim(),
+        }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Checkout failed')
+        throw new Error(formatApiError(data))
       }
-      const order: OrderInfo = await res.json()
+      const order: OrderInfo = data
       setOrderResult(order)
       setStep('payment')
     } catch (e: any) {
-      setPaymentError(e.message || 'Checkout failed')
+      setPaymentError(formatApiError(e) || 'Checkout failed. Please try again.')
     } finally { setProcessing(false) }
   }
 
@@ -111,6 +145,11 @@ export default function CartPage() {
     })
     .then(r => r.json())
     .then(data => {
+      if (data?.error) {
+        setPaymentError(formatApiError(data))
+        setProcessing(false)
+        return
+      }
       if (data.key_id) {
         // Real Razorpay
         const options = {
@@ -131,15 +170,16 @@ export default function CartPage() {
                   order_id: orderResult!.id,
                 }),
               })
+              const verifyData = await verifyRes.json()
               if (verifyRes.ok) {
                 setStep('success')
                 fetchCart()
               } else {
-                setPaymentError('Payment verification failed')
+                setPaymentError(formatApiError(verifyData) || 'Payment verification failed')
                 setStep('failed')
               }
             } catch (e) {
-              setPaymentError('Payment verification error')
+              setPaymentError('Payment verification error. Please check your payment status.')
               setStep('failed')
             }
             setProcessing(false)
@@ -147,12 +187,12 @@ export default function CartPage() {
           prefill: { name: checkoutData.name, email: checkoutData.email, contact: checkoutData.phone },
           theme: { color: '#7c3aed' },
           modal: {
-            ondismiss: () => { setProcessing(false); setPaymentError('Payment cancelled') },
+            ondismiss: () => { setProcessing(false); setPaymentError('Payment cancelled. You can retry from the payment step.') },
           },
         }
         const rzp = new window.Razorpay(options)
         rzp.on('payment.failed', () => {
-          setPaymentError('Payment failed')
+          setPaymentError('Payment failed. Please try again.')
           setStep('failed')
           setProcessing(false)
         })
@@ -161,19 +201,25 @@ export default function CartPage() {
         // Demo mode - simulate success after delay
         setTimeout(async () => {
           try {
-            await fetch(`/api/payments/demo-success/${orderResult!.id}`, { method: 'POST' })
-            setStep('success')
-            fetchCart()
+            const demoRes = await fetch(`/api/payments/demo-success/${orderResult!.id}`, { method: 'POST' })
+            const demoData = await demoRes.json()
+            if (demoRes.ok) {
+              setStep('success')
+              fetchCart()
+            } else {
+              setStep('failed')
+              setPaymentError(formatApiError(demoData) || 'Demo payment failed')
+            }
           } catch (e) {
             setStep('failed')
-            setPaymentError('Demo payment failed')
+            setPaymentError('Demo payment simulation failed. Please try again.')
           }
           setProcessing(false)
         }, 1500)
       }
     })
     .catch(e => {
-      setPaymentError('Failed to initialize payment')
+      setPaymentError('Failed to initialize payment. Please try again.')
       setProcessing(false)
     })
   }
@@ -235,7 +281,7 @@ export default function CartPage() {
           </div>
 
           {paymentError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg mb-4">{paymentError}</div>
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg mb-4">{String(paymentError)}</div>
           )}
 
           <button onClick={initRazorpay} disabled={processing} className="btn-success w-full py-3 text-base">
@@ -267,7 +313,7 @@ export default function CartPage() {
           <div className="bg-dark-700 rounded-lg p-3 mb-4">
             <div className="flex justify-between text-sm"><span className="text-dark-300">Total</span><span className="text-primary-400 font-bold">₹{cart?.total.toLocaleString()}</span></div>
           </div>
-          {paymentError && <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg mb-4">{paymentError}</div>}
+          {paymentError && <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg mb-4">{String(paymentError)}</div>}
           <div className="flex gap-2">
             <button onClick={handleCheckout} disabled={processing} className="btn-primary flex-1 py-3">{processing ? 'Processing...' : 'Place Order →'}</button>
             <button onClick={() => { setStep('cart'); setPaymentError('') }} className="btn-secondary">Back</button>

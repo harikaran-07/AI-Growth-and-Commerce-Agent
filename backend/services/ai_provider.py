@@ -1,12 +1,14 @@
 """
-AI Provider - Supports Groq and Gemini
-Groq uses OpenAI-compatible API format (fast, free tier).
-Falls back to a simple intent parser when no API key is configured.
+AI Provider - Supports Gemini with dual-key failover and rule-based fallback.
+Gemini API Key 1 → Key 2 → Rule-based fallback.
+Keys are NEVER exposed to frontend.
 """
 
 import os
 import json
 import logging
+import time
+import random
 from typing import Any, Dict, List, Optional
 import httpx
 
@@ -15,46 +17,97 @@ logger = logging.getLogger(__name__)
 # Detect provider
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").lower()
 
+# Gemini API keys - ONLY from backend env vars, never exposed to frontend
+GEMINI_KEY_1 = os.getenv("GEMINI_API_KEY_1", os.getenv("GEMINI_API_KEY", ""))
+GEMINI_KEY_2 = os.getenv("GEMINI_API_KEY_2", "")
+GEMINI_KEYS = [k for k in [GEMINI_KEY_1, GEMINI_KEY_2] if k and k not in ("your_api_key_here", "placeholder_secret", "")]
 
-def _get_api_key():
-    return os.getenv("GEMINI_API_KEY", os.getenv("AI_API_KEY", ""))
-
-
-def _get_model():
-    return os.getenv("AI_MODEL", "gemini-3.6-flash")
-
-
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+GEMINI_MODEL = os.getenv("AI_MODEL", "gemini-2.0-flash")
 
-AGENT_SYSTEM_PROMPT = """You are MerchantFlow AI, a helpful shopping assistant for TechZone Electronics.
+# Retry config
+MAX_RETRIES = 2
+RETRY_DELAY_BASE = 1.0
+RETRY_DELAY_MAX = 5.0
 
-You help users find products, make recommendations, add items to their cart, and complete purchases.
+# Track which key is exhausted (in-memory, per-process)
+_exhausted_keys: set = set()
+_key_cooldowns: dict = {}  # key -> timestamp when cooldown expires
 
-STRICT RULES:
+
+def _get_available_keys() -> List[str]:
+    """Get Gemini API keys that are not currently exhausted."""
+    now = time.time()
+    available = []
+    for key in GEMINI_KEYS:
+        if key in _exhausted_keys:
+            # Check if cooldown has expired
+            cooldown_until = _key_cooldowns.get(key, 0)
+            if now >= cooldown_until:
+                _exhausted_keys.discard(key)
+                available.append(key)
+            # else still exhausted
+        else:
+            available.append(key)
+    return available
+
+
+def _mark_key_exhausted(key: str):
+    """Mark a key as exhausted with exponential cooldown."""
+    _exhausted_keys.add(key)
+    # Cooldown: 5 minutes
+    _key_cooldowns[key] = time.time() + 300
+    logger.warning(f"Gemini API key ...{key[-6:]} marked as exhausted (cooldown 5min)")
+
+
+def _is_quota_error(status_code: int, response_text: str) -> bool:
+    """Check if error is a quota/rate-limit error."""
+    if status_code == 429:
+        return True
+    text_lower = response_text.lower()
+    quota_indicators = [
+        "resource_exhausted",
+        "quota exceeded",
+        "rate limit",
+        "429",
+        "too many requests",
+        "quota",
+        "exceeded",
+    ]
+    return any(ind in text_lower for ind in quota_indicators)
+
+
+AGENT_SYSTEM_PROMPT = """You are MerchantFlow AI, an intelligent merchant growth assistant.
+
+You help merchants manage their store, analyze performance, and increase revenue.
+You have access to their real product catalog, inventory, orders, and analytics data.
+
+CAPABILITIES:
+1. Product search and recommendations
+2. Cart management 
+3. Sales analysis and recommendations
+4. Inventory alerts
+5. Pricing insights
+
+RULES:
 1. Use tools for ALL factual product information. Never invent products, prices, or stock.
 2. Never invent payment status or calculate authoritative totals - the backend does that.
 3. Recommend relevant products with short reasons.
 4. Never initiate payment without explicit user approval.
-5. Never bypass spending limits.
-6. If a tool fails, explain the failure and recover safely.
-7. Be concise and friendly. For financial actions, be transparent.
-8. Only provide short user-facing reasons for recommendations.
-9. Never expose internal chain-of-thought, tool names, or system details to the user.
-10. When the user references "that one", "the first one", refer to products from the most recent search results.
-11. Never directly access the database or Razorpay.
-12. Never approve a payment on behalf of the user.
-13. When the user asks to add a product by position (like "add the first one"), use the add_to_cart tool with product_position parameter.
+5. Be concise, friendly, and data-driven.
+6. Never expose internal tool names, system details, or API keys.
+7. Always prioritize merchant revenue growth in your recommendations.
+8. If you don't have enough data, say so honestly.
+9. Never fabricate business metrics.
+10. Give actionable advice based on real data."""
 
-You are a merchant shopping assistant. Behave professionally and helpfully."""
 
-# Tool definitions in OpenAI function format (works for both Groq and Gemini)
 TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
             "name": "search_products",
-            "description": "Search the merchant product catalog. Returns matching products with prices and details.",
+            "description": "Search the merchant product catalog.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -71,7 +124,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_product_details",
-            "description": "Get detailed information about a specific product by its ID.",
+            "description": "Get detailed information about a specific product.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -99,7 +152,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "recommend_upsell",
-            "description": "Get upsell recommendations for a product (more expensive alternatives).",
+            "description": "Get upsell recommendations for a product.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -127,7 +180,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "add_to_cart",
-            "description": "Add a product to the shopping cart by product_id or by product_position (1-based index from search results).",
+            "description": "Add a product to the shopping cart.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -149,38 +202,17 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "calculate_cart_total",
-            "description": "Calculate the authoritative cart total server-side.",
+            "name": "get_merchant_analytics",
+            "description": "Get merchant business analytics: revenue, profit, top sellers, slow movers, low stock, and sales trends.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "check_policy",
-            "description": "Check if cart total is within the merchant spending policy limits.",
+            "name": "get_sales_recommendations",
+            "description": "Get AI-powered sales growth recommendations based on real merchant data.",
             "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "request_payment_approval",
-            "description": "Request explicit user approval before initiating payment.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_payment_status",
-            "description": "Get payment/order status.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "order_id": {"type": "string", "description": "The order ID to check"},
-                },
-            },
         },
     },
 ]
@@ -191,140 +223,135 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
     return TOOL_DEFINITIONS
 
 
+async def generate_ai_response(prompt: str, options: dict = None) -> str:
+    """
+    Centralized AI response generator with dual-key failover.
+    
+    Flow: Key 1 → Key 2 → Rule-based fallback
+    Never exposes API keys. Never crashes.
+    """
+    available_keys = _get_available_keys()
+    
+    if not available_keys:
+        logger.warning("No Gemini API keys available, using rule-based fallback")
+        return _rule_based_fallback(prompt)
+    
+    last_error = None
+    
+    for key in available_keys:
+        for attempt in range(MAX_RETRIES):
+            try:
+                model = GEMINI_MODEL
+                url = f"{GEMINI_BASE_URL}/models/{model}:generateContent?key={key}"
+                
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                    "systemInstruction": {"parts": [{"text": AGENT_SYSTEM_PROMPT}]},
+                    "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
+                }
+                
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(url, headers=headers, json=payload)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            text_parts = [p.get("text", "") for p in parts if "text" in p]
+                            if text_parts:
+                                return "\n".join(text_parts)
+                        return "I couldn't generate a response. Please try again."
+                    
+                    if _is_quota_error(response.status_code, response.text):
+                        logger.warning(f"Gemini key ...{key[-6:]} quota/rate limited (attempt {attempt+1})")
+                        _mark_key_exhausted(key)
+                        last_error = f"Quota exceeded on key ...{key[-6:]}"
+                        break  # Try next key
+                    
+                    # Non-quota error - retry once
+                    if attempt == 0:
+                        logger.warning(f"Gemini API error {response.status_code}, retrying...")
+                        time.sleep(RETRY_DELAY_BASE)
+                        continue
+                    
+                    last_error = f"Gemini API error: {response.status_code}"
+                    break  # Move to next key
+                    
+            except httpx.TimeoutException:
+                logger.warning(f"Gemini timeout for key ...{key[-6:]}")
+                if attempt == 0:
+                    time.sleep(RETRY_DELAY_BASE)
+                    continue
+                last_error = "Timeout"
+                break
+            except Exception as e:
+                logger.error(f"Gemini error: {type(e).__name__}: {e}")
+                last_error = str(e)
+                break
+    
+    # All keys failed - use rule-based fallback
+    logger.warning(f"All Gemini keys failed ({last_error}), using rule-based fallback")
+    return _rule_based_fallback(prompt)
+
+
+def _rule_based_fallback(prompt: str) -> str:
+    """Deterministic rule-based response when AI is unavailable."""
+    prompt_lower = prompt.lower()
+    
+    if any(w in prompt_lower for w in ["what should i sell", "what to sell", "recommend", "suggest"]):
+        return ("I recommend checking your top-selling products and promoting them. "
+                "Focus on products with high margins and good sales velocity. "
+                "Check the Analytics page for detailed insights.")
+    
+    if any(w in prompt_lower for w in ["low stock", "restock", "inventory"]):
+        return ("Check your Products page for items with low stock. "
+                "Products with fewer than 10 units should be restocked soon.")
+    
+    if any(w in prompt_lower for w in ["profit", "margin", "revenue"]):
+        return ("Visit the Analytics page to see your revenue, profit, and margin data. "
+                "The dashboard shows real-time metrics from your orders.")
+    
+    if any(w in prompt_lower for w in ["slow", "not selling", "underperforming"]):
+        return ("Check the Dashboard for slow-moving products. "
+                "Consider promotions or bundles for products with low sales velocity.")
+    
+    if any(w in prompt_lower for w in ["bundle", "cross-sell", "upsell"]):
+        return ("Look at products in the same category for natural bundles. "
+                "Cross-selling complementary products can increase your average order value.")
+    
+    return ("The AI assistant is temporarily unavailable due to API limits. "
+            "You can still browse products, manage your cart, and view analytics. "
+            "Please try again in a few minutes.")
+
+
 async def call_llm(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]],
                    db=None, session_id: str = "default") -> Dict[str, Any]:
     """
-    Call AI provider with function calling.
+    Call AI provider with function calling and dual-key failover.
     Returns: {"content": str|None, "tool_calls": list|None}
     """
-    api_key = _get_api_key()
-    if api_key and api_key not in ("your_api_key_here", "placeholder_secret", ""):
-        if AI_PROVIDER == "groq":
-            return await _call_groq(api_key, messages, db, session_id)
+    available_keys = _get_available_keys()
+    
+    if available_keys:
+        if AI_PROVIDER == "gemini":
+            return await _call_gemini_with_failover(available_keys, messages, db, session_id)
         else:
-            return await _call_gemini_rest(api_key, messages, db, session_id)
-    else:
-        logger.warning(f"No valid API key for {AI_PROVIDER}, using fallback intent parser")
-        return await _fallback_intent_parser(messages)
+            # Groq not supported with failover yet, fall through
+            pass
+    
+    logger.warning(f"No valid API keys for {AI_PROVIDER}, using fallback intent parser")
+    return await _fallback_intent_parser(messages)
 
 
-async def _call_groq(api_key: str, messages: List[Dict[str, Any]],
-                     db=None, session_id: str = "default") -> Dict[str, Any]:
-    """Call Groq via OpenAI-compatible REST API with manual function calling loop."""
+async def _call_gemini_with_failover(keys: List[str], messages: List[Dict[str, Any]],
+                                       db=None, session_id: str = "default") -> Dict[str, Any]:
+    """Call Gemini with automatic failover between keys."""
     from services.agent_tools import execute_tool
-
-    model = _get_model()
-    url = f"{GROQ_BASE_URL}/chat/completions"
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    # Build conversation messages
-    chat_messages = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
-    for msg in messages:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        if role in ("user", "assistant"):
-            chat_messages.append({"role": role, "content": content})
-        elif role == "model":
-            chat_messages.append({"role": "assistant", "content": content})
-
-    # Ensure last message is from user
-    if not chat_messages or chat_messages[-1].get("role") != "user":
-        chat_messages.append({"role": "user", "content": messages[-1].get("content", "Hello")})
-
-    payload = {
-        "model": model,
-        "messages": chat_messages,
-        "tools": TOOL_DEFINITIONS,
-        "tool_choice": "auto",
-        "temperature": 0.7,
-        "max_tokens": 1024,
-    }
-
-    all_tool_calls = []
-    MAX_ITERATIONS = 10
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        for iteration in range(MAX_ITERATIONS):
-            try:
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status()
-                data = response.json()
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Groq API HTTP error: {e.response.status_code}: {e.response.text[:200]}")
-                return {"content": "I'm having trouble connecting to the AI service. Please try again in a moment.", "tool_calls": None}
-            except Exception as e:
-                logger.error(f"Groq API request failed: {type(e).__name__}: {e}")
-                return {"content": "I'm having trouble connecting to the AI service. Please try again in a moment.", "tool_calls": None}
-
-            # Parse response
-            choice = data.get("choices", [{}])[0]
-            message = choice.get("message", {})
-            content = message.get("content")
-            tool_calls_raw = message.get("tool_calls", [])
-
-            if not tool_calls_raw:
-                # No more tool calls - return final text response
-                return {"content": content, "tool_calls": all_tool_calls if all_tool_calls else None}
-
-            # Add assistant message to conversation
-            chat_messages.append(message)
-
-            # Execute tool calls
-            tool_results = []
-            for tc in tool_calls_raw:
-                tc_id = tc.get("id", "")
-                func = tc.get("function", {})
-                tool_name = func.get("name", "")
-                tool_args_str = func.get("arguments", "{}")
-
-                try:
-                    tool_args = json.loads(tool_args_str) if isinstance(tool_args_str, str) else tool_args_str
-                except json.JSONDecodeError:
-                    tool_args = {}
-
-                all_tool_calls.append({"name": tool_name, "arguments": tool_args})
-
-                # Execute the tool
-                try:
-                    result_str = await execute_tool(tool_name, tool_args, db, session_id)
-                    result_data = json.loads(result_str) if result_str.strip().startswith("{") or result_str.strip().startswith("[") else {"output": result_str}
-                except Exception as e:
-                    logger.error(f"Tool {tool_name} failed: {e}")
-                    result_data = {"error": f"Tool execution failed: {str(e)}"}
-
-                tool_results.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": json.dumps(result_data),
-                })
-
-            # Add tool results to conversation
-            chat_messages.extend(tool_results)
-
-            # Update payload
-            payload["messages"] = chat_messages
-
-        # Max iterations reached
-        return {
-            "content": "I've processed your request. Is there anything else I can help with?",
-            "tool_calls": all_tool_calls if all_tool_calls else None,
-        }
-
-
-async def _call_gemini_rest(api_key: str, messages: List[Dict[str, Any]],
-                             db=None, session_id: str = "default") -> Dict[str, Any]:
-    """Call Gemini via REST API with manual function calling loop."""
-    from services.agent_tools import execute_tool
-
-    model = _get_model()
-    url = f"{GEMINI_BASE_URL}/models/{model}:generateContent?key={api_key}"
-
-    headers = {"Content-Type": "application/json"}
-
+    
+    model = GEMINI_MODEL
+    
     # Convert OpenAI tool format to Gemini format
     gemini_tools = []
     for tool in TOOL_DEFINITIONS:
@@ -334,7 +361,7 @@ async def _call_gemini_rest(api_key: str, messages: List[Dict[str, Any]],
             "description": func["description"],
             "parameters": func["parameters"],
         })
-
+    
     # Build initial contents
     contents = []
     for msg in messages:
@@ -342,120 +369,134 @@ async def _call_gemini_rest(api_key: str, messages: List[Dict[str, Any]],
         content = msg.get("content", "")
         if role in ("user", "model"):
             contents.append({"role": role, "parts": [{"text": content}]})
-
+    
     if not contents or contents[-1].get("role") != "user":
         contents.append({"role": "user", "parts": [{"text": messages[-1].get("content", "Hello")}]})
-
+    
     payload = {
         "contents": contents,
         "systemInstruction": {"parts": [{"text": AGENT_SYSTEM_PROMPT}]},
         "tools": [{"functionDeclarations": gemini_tools}],
         "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
     }
-
+    
     all_tool_calls = []
     MAX_ITERATIONS = 10
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        for iteration in range(MAX_ITERATIONS):
-            try:
-                response = await client.post(url, headers=headers, json=payload)
-                response.raise_for_status()
-                data = response.json()
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Gemini API HTTP error: {e.response.status_code}: {e.response.text[:200]}")
-                return {"content": "I'm having trouble connecting to the AI service. Please try again in a moment.", "tool_calls": None}
-            except Exception as e:
-                logger.error(f"Gemini API request failed: {type(e).__name__}: {e}")
-                return {"content": "I'm having trouble connecting to the AI service. Please try again in a moment.", "tool_calls": None}
-
-            candidates = data.get("candidates", [])
-            if not candidates:
-                return {"content": "I couldn't generate a response. Please try again.", "tool_calls": None}
-
-            candidate = candidates[0]
-            parts = candidate.get("content", {}).get("parts", [])
-            function_calls = [p for p in parts if "functionCall" in p]
-            text_parts = [p.get("text", "") for p in parts if "text" in p]
-
-            if not function_calls:
-                final_text = "\n".join(text_parts) if text_parts else None
-                return {"content": final_text, "tool_calls": all_tool_calls if all_tool_calls else None}
-
-            contents.append({"role": "model", "parts": parts})
-
-            tool_parts = []
-            for fc in function_calls:
-                fc_data = fc["functionCall"]
-                tool_name = fc_data["name"]
-                tool_args = fc_data.get("args", {})
-                all_tool_calls.append({"name": tool_name, "arguments": tool_args})
-
+    
+    last_error = None
+    
+    for key_idx, api_key in enumerate(keys):
+        logger.info(f"Trying Gemini key #{key_idx + 1} (...{api_key[-6:]})")
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for iteration in range(MAX_ITERATIONS):
                 try:
-                    result_str = await execute_tool(tool_name, tool_args, db, session_id)
-                    result_data = json.loads(result_str) if result_str.strip().startswith("{") or result_str.strip().startswith("[") else {"output": result_str}
+                    url = f"{GEMINI_BASE_URL}/models/{model}:generateContent?key={api_key}"
+                    response = await client.post(url, headers={"Content-Type": "application/json"}, json=payload)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                    elif _is_quota_error(response.status_code, response.text):
+                        logger.warning(f"Gemini key #{key_idx+1} exhausted, trying next key...")
+                        _mark_key_exhausted(api_key)
+                        last_error = "quota_exhausted"
+                        break  # Try next key
+                    else:
+                        logger.error(f"Gemini HTTP {response.status_code}")
+                        return {"content": "AI service error. Please try again.", "tool_calls": None}
+                        
+                except httpx.TimeoutException:
+                    logger.warning("Gemini timeout")
+                    last_error = "timeout"
+                    break
                 except Exception as e:
-                    logger.error(f"Tool {tool_name} failed: {e}")
-                    result_data = {"error": f"Tool execution failed: {str(e)}"}
-
-                tool_parts.append({"functionResponse": {"name": tool_name, "response": result_data}})
-
-            contents.append({"role": "user", "parts": tool_parts})
-            payload["contents"] = contents
-
-        return {
-            "content": "I've processed your request. Is there anything else I can help with?",
-            "tool_calls": all_tool_calls if all_tool_calls else None,
-        }
+                    logger.error(f"Gemini request failed: {type(e).__name__}: {e}")
+                    return {"content": "AI service temporarily unavailable. Please try again.", "tool_calls": None}
+                
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    return {"content": "I couldn't generate a response. Please try again.", "tool_calls": None}
+                
+                candidate = candidates[0]
+                parts = candidate.get("content", {}).get("parts", [])
+                function_calls = [p for p in parts if "functionCall" in p]
+                text_parts = [p.get("text", "") for p in parts if "text" in p]
+                
+                if not function_calls:
+                    final_text = "\n".join(text_parts) if text_parts else None
+                    return {"content": final_text, "tool_calls": all_tool_calls if all_tool_calls else None}
+                
+                contents.append({"role": "model", "parts": parts})
+                
+                tool_parts = []
+                for fc in function_calls:
+                    fc_data = fc["functionCall"]
+                    tool_name = fc_data["name"]
+                    tool_args = fc_data.get("args", {})
+                    all_tool_calls.append({"name": tool_name, "arguments": tool_args})
+                    
+                    try:
+                        result_str = await execute_tool(tool_name, tool_args, db, session_id)
+                        result_data = json.loads(result_str) if result_str.strip().startswith(("{", "[")) else {"output": result_str}
+                    except Exception as e:
+                        logger.error(f"Tool {tool_name} failed: {e}")
+                        result_data = {"error": f"Tool execution failed: {str(e)}"}
+                    
+                    tool_parts.append({"functionResponse": {"name": tool_name, "response": result_data}})
+                
+                contents.append({"role": "user", "parts": tool_parts})
+                payload["contents"] = contents
+            
+            # If we broke out of inner loop with quota error, try next key
+            if last_error == "quota_exhausted":
+                last_error = None
+                continue
+            break
+    
+    # All keys failed
+    if last_error == "quota_exhausted":
+        return {"content": _rule_based_fallback("general"), "tool_calls": all_tool_calls if all_tool_calls else None}
+    
+    return {
+        "content": "AI service is temporarily unavailable. You can still browse the merchant catalog.",
+        "tool_calls": all_tool_calls if all_tool_calls else None,
+    }
 
 
 async def _fallback_intent_parser(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Fallback intent parser when no API key is configured."""
     if not messages:
-        return {"content": "Hello! How can I help you find products today?", "tool_calls": None}
-
+        return {"content": "Hello! How can I help you today?", "tool_calls": None}
+    
     last_msg = messages[-1]
     if last_msg.get("role") != "user":
         return {"content": "Here are the results. Would you like to add any items to your cart?", "tool_calls": None}
-
+    
     text = last_msg.get("content", "").lower()
-
+    
     if any(w in text for w in ["search", "find", "show", "looking for", "need", "want"]):
         import re
-        category = None
-        category_map = {
-            "headphone": "Audio", "earphone": "Audio", "earbud": "Audio",
-            "speaker": "Audio", "mouse": "Computer Accessories",
-            "keyboard": "Computer Accessories", "webcam": "Computer Accessories",
-            "phone case": "Mobile Accessories", "charger": "Mobile Accessories",
-            "power bank": "Mobile Accessories", "lamp": "Office Products",
-        }
-        for keyword, cat in category_map.items():
-            if keyword in text:
-                category = cat
-                break
         max_price = None
         price_match = re.search(r'under\s*₹?\s*(\d+)', text)
         if price_match:
             max_price = float(price_match.group(1))
-        return {"content": None, "tool_calls": [{"name": "search_products", "arguments": {"category": category, "max_price": max_price, "in_stock": True}}]}
-
+        return {"content": None, "tool_calls": [{"name": "search_products", "arguments": {"query": text, "max_price": max_price, "in_stock": True}}]}
+    
+    elif any(w in text for w in ["analytics", "dashboard", "revenue", "profit", "sales"]):
+        return {"content": None, "tool_calls": [{"name": "get_merchant_analytics", "arguments": {}}]}
+    
+    elif any(w in text for w in ["recommend", "suggest", "what should", "growth"]):
+        return {"content": None, "tool_calls": [{"name": "get_sales_recommendations", "arguments": {}}]}
+    
     elif any(w in text for w in ["add", "cart", "buy"]):
         import re
         position = 1
         m = re.search(r'(\d+)(?:st|nd|rd|th)', text)
         if m:
             position = int(m.group(1))
-        else:
-            wm = re.search(r'(first|second|third)', text)
-            if wm:
-                position = {"first": 1, "second": 2, "third": 3}.get(wm.group(0), 1)
         return {"content": None, "tool_calls": [{"name": "add_to_cart", "arguments": {"product_position": position, "quantity": 1}}]}
-
+    
     elif any(w in text for w in ["cart", "total", "how much", "bill"]):
         return {"content": None, "tool_calls": [{"name": "get_cart", "arguments": {}}]}
-
-    elif any(w in text for w in ["pay", "checkout", "proceed"]):
-        return {"content": None, "tool_calls": [{"name": "request_payment_approval", "arguments": {}}]}
-
-    return {"content": "I can help you find products, add items to your cart, and complete purchases. Try asking 'Find headphones under 3000'.", "tool_calls": None}
+    
+    return {"content": "I can help you find products, analyze sales, and manage your store. Try asking 'What should I sell today?' or 'Show low stock products'.", "tool_calls": None}

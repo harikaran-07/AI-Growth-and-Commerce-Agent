@@ -7,13 +7,14 @@ Unified deployment: serves both the API and the frontend.
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 from models.database import engine, Base, init_db
 from routes import products, carts, payments, agent, audit, analytics, policies, approvals, webhooks
 from routes import orders, notifications, pricing
 import os
 import logging
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -65,6 +66,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global error handler - returns consistent JSON error responses."""
+    logger.error(f"Unhandled exception: {type(exc).__name__}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred. Please try again."
+            }
+        }
+    )
+
 # Include API routers
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(carts.router, prefix="/api/carts", tags=["Carts"])
@@ -83,12 +100,24 @@ app.include_router(pricing.router, prefix="/api/pricing", tags=["Pricing"])
 @app.get("/health")
 async def health():
     import os
-    gemini_key = os.getenv("GEMINI_API_KEY", os.getenv("AI_API_KEY", ""))
+    # Check Gemini key availability
+    key1 = os.getenv("GEMINI_API_KEY_1", os.getenv("GEMINI_API_KEY", ""))
+    key2 = os.getenv("GEMINI_API_KEY_2", "")
+    has_gemini = bool(key1 and key1 not in ("your_api_key_here", "placeholder_secret", ""))
+    has_gemini2 = bool(key2 and key2 not in ("your_api_key_here", "placeholder_secret", ""))
+    
     razorpay_key = os.getenv("RAZORPAY_KEY_ID", "")
     return {
         "status": "healthy",
         "service": "merchantflow",
-        "ai": os.getenv("AI_PROVIDER", "gemini"),
+        "version": "2.0.0",
+        "ai": {
+            "provider": os.getenv("AI_PROVIDER", "gemini"),
+            "model": os.getenv("AI_MODEL", "gemini-2.0-flash"),
+            "key1_configured": has_gemini,
+            "key2_configured": has_gemini2,
+            "mode": "live" if has_gemini else "fallback",
+        },
         "razorpay": "test_mode" if razorpay_key.startswith("rzp_test_") else ("configured" if razorpay_key else "demo_mode"),
         "database": "connected",
     }

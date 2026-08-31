@@ -25,26 +25,33 @@ FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "f
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - initialize database on startup."""
-    logger.info("Initializing database...")
+    logger.info("Initializing database schema...")
     await init_db()
-    logger.info("Running seed data...")
+    
+    # Seed products ONLY if the database is empty (first deploy / fresh DB)
+    # NEVER reseed on restart - this preserves real orders and inventory
     try:
         from models.database import async_session
         from sqlalchemy import text
         async with async_session() as db:
             result = await db.execute(text("SELECT COUNT(*) FROM products"))
             count = result.scalar()
-        if count < 100:
-            logger.info(f"Only {count} products, seeding catalog...")
-            from seed import seed
-            await seed()
-            logger.info("Seed completed successfully")
-        else:
-            logger.info(f"Found {count} products, skipping seed")
+            
+            if count == 0:
+                # First time - seed the catalog
+                logger.info("Empty database detected. Seeding product catalog...")
+                from seed import seed
+                await seed()
+                logger.info("Seed completed successfully")
+            else:
+                # Database already has products - NEVER reseed
+                logger.info(f"Found {count} products in database - skipping seed (preserving existing data)")
+                
     except Exception as e:
-        logger.error(f"Seed failed: {e}")
+        logger.error(f"Startup check failed: {e}")
         import traceback
         traceback.print_exc()
+    
     logger.info("AI Growth and Commerce Agent started successfully")
     yield
     logger.info("AI Growth and Commerce Agent shutting down")
@@ -100,17 +107,31 @@ app.include_router(synthetic.router, prefix="/api", tags=["Synthetic Data"])
 
 @app.get("/health")
 async def health():
-    import os
-    # Check Gemini key availability
+    """Health check endpoint - returns 200 when healthy."""
     key1 = os.getenv("GEMINI_API_KEY_1", os.getenv("GEMINI_API_KEY", ""))
     key2 = os.getenv("GEMINI_API_KEY_2", "")
     has_gemini = bool(key1 and key1 not in ("your_api_key_here", "placeholder_secret", ""))
     has_gemini2 = bool(key2 and key2 not in ("your_api_key_here", "placeholder_secret", ""))
     
     razorpay_key = os.getenv("RAZORPAY_KEY_ID", "")
+    
+    # Check database connectivity
+    db_status = "unknown"
+    db_type = "unknown"
+    try:
+        from models.database import async_session, IS_POSTGRES
+        from sqlalchemy import text
+        async with async_session() as db:
+            await db.execute(text("SELECT 1"))
+            db_status = "connected"
+            db_type = "postgresql" if IS_POSTGRES else "sqlite"
+    except Exception as e:
+        db_status = f"error: {type(e).__name__}"
+        db_type = "unknown"
+    
     return {
         "status": "healthy",
-        "service": "merchantflow",
+        "service": "AI Growth and Commerce Agent",
         "version": "2.0.0",
         "ai": {
             "provider": os.getenv("AI_PROVIDER", "gemini"),
@@ -120,7 +141,10 @@ async def health():
             "mode": "live" if has_gemini else "fallback",
         },
         "razorpay": "test_mode" if razorpay_key.startswith("rzp_test_") else ("configured" if razorpay_key else "demo_mode"),
-        "database": "connected",
+        "database": {
+            "status": db_status,
+            "type": db_type,
+        },
     }
 
 

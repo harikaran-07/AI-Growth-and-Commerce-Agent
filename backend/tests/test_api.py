@@ -1,5 +1,5 @@
 """
-Comprehensive tests for MerchantFlow AI backend.
+Comprehensive tests for AI Growth and Commerce Agent backend.
 """
 import pytest
 import sys

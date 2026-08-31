@@ -1,10 +1,12 @@
 """
-Seed script: 500+ real products across 10 categories for MerchantFlow AI.
-Run once to populate the database.
+Seed script: 10,000+ real products across many categories for MerchantFlow AI.
+Includes cost_price, sales, revenue, margin for each product.
 """
 import uuid
 import asyncio
 import logging
+import random
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +15,17 @@ def _id():
     return str(uuid.uuid4())
 
 
+def _hash_seed(name):
+    return int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
+
+
 # ──────────────────────────────────────────────────────────
-# 100 ELECTRONICS products
+# Product templates: (name, description, category, subcategory, brand, price, stock)
+# We'll derive cost_price, sales, revenue, margin from these
 # ──────────────────────────────────────────────────────────
-ELECTRONICS = [
+
+ELECTRONICS_PRODUCTS = [
+    # Smartphones
     ("iPhone 15 Pro Max", "Apple iPhone 15 Pro Max 256GB", "Electronics", "Smartphones", "Apple", 159900, 30),
     ("Samsung Galaxy S24 Ultra", "Samsung Galaxy S24 Ultra 512GB", "Electronics", "Smartphones", "Samsung", 134999, 25),
     ("OnePlus 12", "OnePlus 12 5G 256GB", "Electronics", "Smartphones", "OnePlus", 64999, 40),
@@ -27,7 +36,18 @@ ELECTRONICS = [
     ("Nothing Phone 2", "Nothing Phone 2 Transparent Design", "Electronics", "Smartphones", "Nothing", 34999, 30),
     ("Samsung Galaxy A54", "Samsung Galaxy A54 5G 128GB", "Electronics", "Smartphones", "Samsung", 32999, 50),
     ("Redmi Note 13 Pro", "Redmi Note 13 Pro 5G 256GB", "Electronics", "Smartphones", "Xiaomi", 24999, 60),
+    ("iPhone 14", "Apple iPhone 14 128GB", "Electronics", "Smartphones", "Apple", 69999, 35),
+    ("Samsung Galaxy S23", "Samsung Galaxy S23 128GB", "Electronics", "Smartphones", "Samsung", 54999, 28),
+    ("OnePlus Nord CE 3", "OnePlus Nord CE 3 5G 128GB", "Electronics", "Smartphones", "OnePlus", 24999, 40),
+    ("iQOO 12", "iQOO 12 5G 256GB", "Electronics", "Smartphones", "iQOO", 52999, 18),
+    ("Motorola Edge 40 Pro", "Motorola Edge 40 Pro 5G", "Electronics", "Smartphones", "Motorola", 45999, 20),
+    ("Lava Blaze Pro 5G", "Lava Blaze Pro 5G Budget Phone", "Electronics", "Smartphones", "Lava", 12999, 70),
+    ("Nokia G42 5G", "Nokia G42 5G Mid-Range Phone", "Electronics", "Smartphones", "Nokia", 17999, 35),
+    ("Poco X6 Pro", "Poco X6 Pro 5G 256GB", "Electronics", "Smartphones", "Poco", 26999, 42),
+    ("Honor 90", "Honor 90 5G Camera Phone", "Electronics", "Smartphones", "Honor", 37999, 25),
+    ("Infinix Zero 30", "Infinix Zero 30 5G 256GB", "Electronics", "Smartphones", "Infinix", 22999, 48),
 
+    # Laptops
     ("MacBook Air M3", "Apple MacBook Air 15-inch M3 16GB", "Electronics", "Laptops", "Apple", 164900, 15),
     ("Dell XPS 15", "Dell XPS 15 Intel i7 16GB 512GB SSD", "Electronics", "Laptops", "Dell", 134999, 12),
     ("HP Spectre x360", "HP Spectre x360 14 OLED Touch", "Electronics", "Laptops", "HP", 119999, 18),
@@ -38,18 +58,25 @@ ELECTRONICS = [
     ("HP Pavilion 15", "HP Pavilion 15 AMD Ryzen 5", "Electronics", "Laptops", "HP", 54999, 35),
     ("ASUS Zenbook 14", "ASUS Zenbook 14 OLED i5", "Electronics", "Laptops", "ASUS", 74999, 22),
     ("MacBook Pro 14 M3 Pro", "Apple MacBook Pro 14-inch M3 Pro", "Electronics", "Laptops", "Apple", 199900, 8),
+    ("Dell Inspiron 15", "Dell Inspiron 15 AMD Ryzen 5 16GB", "Electronics", "Laptops", "Dell", 49999, 40),
+    ("HP 15s", "HP 15s AMD Ryzen 3 8GB", "Electronics", "Laptops", "HP", 39999, 45),
+    ("Lenovo LOQ 15", "Lenovo LOQ 15 RTX 3050 Gaming", "Electronics", "Laptops", "Lenovo", 69999, 22),
+    ("ASUS TUF Gaming A15", "ASUS TUF Gaming A15 Ryzen 7 RTX 4060", "Electronics", "Laptops", "ASUS", 89999, 16),
+    ("Acer Aspire 5", "Acer Aspire 5 Intel i5 8GB", "Electronics", "Laptops", "Acer", 44999, 35),
 
+    # Tablets
     ("iPad Pro 12.9 M2", "Apple iPad Pro 12.9-inch M2 256GB", "Electronics", "Tablets", "Apple", 112900, 15),
     ("Samsung Galaxy Tab S9", "Samsung Galaxy Tab S9 11-inch 128GB", "Electronics", "Tablets", "Samsung", 74999, 20),
-    ("Lenovo Tab P12 Pro", "Lenovo Tab P12 Pro AMOLED 256GB", "Electronics", "Tablets", "Lenovo", 69999, 12),
     ("OnePlus Pad", "OnePlus Pad 256GB WiFi", "Electronics", "Tablets", "OnePlus", 37999, 25),
-    ("Realme Pad 2", "Realme Pad 2 11-inch 128GB", "Electronics", "Tablets", "Realme", 17999, 35),
-    ("iPad Air M1", "Apple iPad Air M1 64GB WiFi", "Electronics", "Tablets", "Apple", 59900, 18),
     ("Xiaomi Pad 6", "Xiaomi Pad 6 144Hz 128GB", "Electronics", "Tablets", "Xiaomi", 26999, 30),
     ("Lenovo Tab M10 Plus", "Lenovo Tab M10 Plus Gen 3 64GB", "Electronics", "Tablets", "Lenovo", 15999, 40),
-    ("Samsung Galaxy Tab A9", "Samsung Galaxy Tab A9 8.7-inch 64GB", "Electronics", "Tablets", "Samsung", 14999, 45),
+    ("iPad Air M1", "Apple iPad Air M1 64GB WiFi", "Electronics", "Tablets", "Apple", 59900, 18),
+    ("Realme Pad 2", "Realme Pad 2 11-inch 128GB", "Electronics", "Tablets", "Realme", 17999, 35),
     ("Honor Pad X9", "Honor Pad X9 11.5-inch 128GB", "Electronics", "Tablets", "Honor", 22999, 28),
+    ("Samsung Galaxy Tab A9", "Samsung Galaxy Tab A9 8.7-inch 64GB", "Electronics", "Tablets", "Samsung", 14999, 45),
+    ("Lenovo Tab P12 Pro", "Lenovo Tab P12 Pro AMOLED 256GB", "Electronics", "Tablets", "Lenovo", 69999, 12),
 
+    # Monitors
     ("LG UltraFine 27UK850", "LG 27-inch 4K UHD Monitor HDR10", "Electronics", "Monitors", "LG", 42999, 20),
     ("Dell S2722QC", "Dell 27-inch 4K USB-C Monitor", "Electronics", "Monitors", "Dell", 34999, 25),
     ("Samsung Odyssey G5", "Samsung 27-inch 165Hz Curved Gaming", "Electronics", "Monitors", "Samsung", 24999, 30),
@@ -61,6 +88,7 @@ ELECTRONICS = [
     ("Gigabyte M28U", "Gigabyte 28-inch 4K 144Hz Gaming", "Electronics", "Monitors", "Gigabyte", 36999, 16),
     ("Philips 27E1N5600", "Philips 27-inch QHD IPS Monitor", "Electronics", "Monitors", "Philips", 17999, 28),
 
+    # Keyboards
     ("Logitech MX Keys S", "Logitech MX Keys S Wireless Keyboard", "Electronics", "Keyboards", "Logitech", 11995, 40),
     ("Keychron Q1 Pro", "Keychron Q1 Pro QMK Wireless 75%", "Electronics", "Keyboards", "Keychron", 18999, 20),
     ("Razer BlackWidow V4", "Razer BlackWidow V4 Mechanical RGB", "Electronics", "Keyboards", "Razer", 16999, 15),
@@ -72,6 +100,7 @@ ELECTRONICS = [
     ("Cosmic Byte CB-GK-18", "Cosmic Byte Firefly RGB Mechanical", "Electronics", "Keyboards", "Cosmic Byte", 1999, 35),
     ("Ant Esports MK3400W Pro", "Ant Esports Wireless Mechanical", "Electronics", "Keyboards", "Ant Esports", 3499, 25),
 
+    # Mice
     ("Logitech MX Master 3S", "Logitech MX Master 3S Ergonomic Mouse", "Electronics", "Mice", "Logitech", 8995, 30),
     ("Razer DeathAdder V3", "Razer DeathAdder V3 Gaming Mouse", "Electronics", "Mice", "Razer", 6999, 25),
     ("Logitech G Pro X Superlight", "Logitech G Pro X Superlight 2 Wireless", "Electronics", "Mice", "Logitech", 14995, 15),
@@ -83,6 +112,7 @@ ELECTRONICS = [
     ("Lenovo Legion M600", "Lenovo Legion M600 Wireless Gaming", "Electronics", "Mice", "Lenovo", 4999, 22),
     ("BenQ Zowie EC2", "BenQ Zowie EC2 Ergonomic Gaming", "Electronics", "Mice", "BenQ", 5499, 18),
 
+    # Headphones
     ("Sony WH-1000XM5", "Sony WH-1000XM5 Wireless NC Headphones", "Electronics", "Headphones", "Sony", 29990, 25),
     ("JBL Tune 770NC", "JBL Tune 770NC Wireless Over-Ear", "Electronics", "Headphones", "JBL", 5999, 40),
     ("boAt Rockerz 551", "boAt Rockerz 551 Bluetooth Headphones", "Electronics", "Headphones", "boAt", 1799, 60),
@@ -94,6 +124,7 @@ ELECTRONICS = [
     ("Marshall Major IV", "Marshall Major IV On-Ear Wireless", "Electronics", "Headphones", "Marshall", 14999, 12),
     ("Skullcandy Crusher ANC 2", "Skullcandy Crusher ANC 2 Wireless NC", "Electronics", "Headphones", "Skullcandy", 12999, 18),
 
+    # Earphones
     ("Sony WF-1000XM5", "Sony WF-1000XM5 TWS Earbuds", "Electronics", "Earphones", "Sony", 27990, 20),
     ("boAt Airdopes 141", "boAt Airdopes 141 TWS Earbuds", "Electronics", "Earphones", "boAt", 1299, 80),
     ("JBL Tune Beam", "JBL Tune Beam TWS Earbuds ANC", "Electronics", "Earphones", "JBL", 7999, 30),
@@ -105,6 +136,7 @@ ELECTRONICS = [
     ("Apple AirPods Pro 2", "Apple AirPods Pro 2nd Gen USB-C", "Electronics", "Earphones", "Apple", 24900, 15),
     ("Jabra Elite 4", "Jabra Elite 4 TWS ANC Earbuds", "Electronics", "Earphones", "Jabra", 7999, 25),
 
+    # Speakers
     ("JBL Charge 5", "JBL Charge 5 Portable BT Speaker", "Electronics", "Speakers", "JBL", 17999, 25),
     ("Sony SRS-XB100", "Sony SRS-XB100 Wireless Speaker", "Electronics", "Speakers", "Sony", 4990, 35),
     ("Marshall Emberton II", "Marshall Emberton II Portable Speaker", "Electronics", "Speakers", "Marshall", 16999, 15),
@@ -116,6 +148,7 @@ ELECTRONICS = [
     ("JBL Bar 2.0", "JBL Bar 2.0 All-in-One Soundbar", "Electronics", "Speakers", "JBL", 14999, 22),
     ("Redmi Soundbar 2.0", "Redmi Soundbar 2.0 with Subwoofer", "Electronics", "Speakers", "Xiaomi", 4999, 40),
 
+    # Webcams
     ("Logitech C920s HD", "Logitech C920s HD Pro Webcam", "Electronics", "Webcams", "Logitech", 5995, 40),
     ("Razer Kiyo Pro", "Razer Kiyo Pro 1080p Webcam HDR", "Electronics", "Webcams", "Razer", 11999, 15),
     ("Poly Studio P5", "Poly Studio P5 USB Webcam", "Electronics", "Webcams", "Poly", 7999, 25),
@@ -127,6 +160,7 @@ ELECTRONICS = [
     ("Insta360 Link", "Insta360 Link AI Webcam 4K", "Electronics", "Webcams", "Insta360", 19999, 10),
     ("Elgato Facecam MK.2", "Elgato Facecam MK.2 1080p60", "Electronics", "Webcams", "Elgato", 14999, 12),
 
+    # SSDs
     ("Samsung T7 1TB", "Samsung T7 Portable SSD 1TB USB 3.2", "Electronics", "SSDs", "Samsung", 10999, 30),
     ("WD Black SN850X 1TB", "WD Black SN850X NVMe SSD 1TB", "Electronics", "SSDs", "Western Digital", 9999, 25),
     ("Crucial P3 Plus 1TB", "Crucial P3 Plus NVMe SSD 1TB", "Electronics", "SSDs", "Crucial", 6499, 40),
@@ -138,6 +172,7 @@ ELECTRONICS = [
     ("ADATA Legend 800 1TB", "ADATA Legend 800 NVMe SSD 1TB", "Electronics", "SSDs", "ADATA", 5999, 35),
     ("Sabrent Rocket 4 Plus 2TB", "Sabrent Rocket 4 Plus NVMe 2TB", "Electronics", "SSDs", "Sabrent", 19999, 10),
 
+    # Routers
     ("TP-Link Archer C6", "TP-Link Archer C6 AC1200 WiFi Router", "Electronics", "Routers", "TP-Link", 2999, 50),
     ("ASUS RT-AX86U Pro", "ASUS RT-AX86U Pro WiFi 6 Router", "Electronics", "Routers", "ASUS", 18999, 12),
     ("Netgear Nighthawk RAX50", "Netgear Nighthawk AX5400 WiFi 6 Router", "Electronics", "Routers", "Netgear", 12999, 15),
@@ -149,6 +184,7 @@ ELECTRONICS = [
     ("ASUS ZenWiFi AX", "ASUS ZenWiFi AX Mesh System 3-Pack", "Electronics", "Routers", "ASUS", 32999, 8),
     ("TP-Link Deco XE75", "TP-Link Deco XE75 WiFi 6E Mesh", "Electronics", "Routers", "TP-Link", 24999, 10),
 
+    # Smart Watches
     ("Apple Watch Series 9", "Apple Watch Series 9 45mm GPS", "Electronics", "Smart Watches", "Apple", 49900, 20),
     ("Samsung Galaxy Watch 6", "Samsung Galaxy Watch 6 Classic 47mm", "Electronics", "Smart Watches", "Samsung", 32999, 22),
     ("Amazfit GTR 4", "Amazfit GTR 4 GPS Smartwatch", "Electronics", "Smart Watches", "Amazfit", 16999, 30),
@@ -160,6 +196,7 @@ ELECTRONICS = [
     ("Fossil Gen 6 Hybrid", "Fossil Gen 6 Hybrid Smartwatch", "Electronics", "Smart Watches", "Fossil", 18999, 12),
     ("Garmin Venu 3", "Garmin Venu 3 GPS Smartwatch", "Electronics", "Smart Watches", "Garmin", 49999, 8),
 
+    # Power Banks
     ("Baseus 20000mAh PB", "Baseus 20000mAh Fast Charging Power Bank", "Electronics", "Power Banks", "Baseus", 2499, 45),
     ("Mi Power Bank 3i", "Mi 20000mAh Power Bank 3i 18W", "Electronics", "Power Banks", "Xiaomi", 1799, 55),
     ("Ambrane 10000mAh", "Ambrane 10000mAh Slim Power Bank", "Electronics", "Power Banks", "Ambrane", 999, 70),
@@ -171,6 +208,7 @@ ELECTRONICS = [
     ("Anker PowerCore 26800", "Anker PowerCore 26800mAh Power Bank", "Electronics", "Power Banks", "Anker", 5999, 15),
     ("OnePlus 10000mAh", "OnePlus 10000mAh Warp Charge PB", "Electronics", "Power Banks", "OnePlus", 2299, 35),
 
+    # Cameras
     ("Canon EOS R50", "Canon EOS R50 Mirrorless Camera 24MP", "Electronics", "Cameras", "Canon", 74999, 10),
     ("Sony Alpha 6400", "Sony Alpha 6400 Mirrorless APS-C", "Electronics", "Cameras", "Sony", 79999, 8),
     ("Nikon Z50", "Nikon Z50 Mirrorless Camera Kit", "Electronics", "Cameras", "Nikon", 84999, 7),
@@ -182,461 +220,300 @@ ELECTRONICS = [
     ("Insta360 X3", "Insta360 X3 360 Action Camera", "Electronics", "Cameras", "Insta360", 44999, 10),
     ("Nikon Z30", "Nikon Z30 Vlogging Camera Kit", "Electronics", "Cameras", "Nikon", 64999, 11),
 
-    ("Dell 240GB USB Drive", "Dell 240GB USB 3.0 Flash Drive", "Electronics", "USB Drives", "Dell", 1999, 50),
-    ("SanDisk Ultra 128GB", "SanDisk Ultra 128GB USB 3.0 Flash Drive", "Electronics", "USB Drives", "SanDisk", 999, 70),
-    ("Kingston DataTraveler 64GB", "Kingston DataTraveler 64GB USB 3.0", "Electronics", "USB Drives", "Kingston", 599, 80),
-    ("Samsung BAR Plus 256GB", "Samsung BAR Plus 256GB USB 3.1", "Electronics", "USB Drives", "Samsung", 2999, 40),
-    ("HP v236w 64GB", "HP v236w Metal USB Drive 64GB", "Electronics", "USB Drives", "HP", 549, 75),
-    ("Transcend JetFlash 890 128GB", "Transcend JetFlash 890 128GB USB-C", "Electronics", "USB Drives", "Transcend", 1499, 45),
-    ("Strontium AMMO 256GB", "Strontium AMMO 256GB USB 3.1 Flash", "Electronics", "USB Drives", "Strontium", 2499, 35),
-    ("ADATA UV370 128GB", "ADATA UV370 128GB USB 3.1 Flash Drive", "Electronics", "USB Drives", "ADATA", 899, 60),
-    ("Toshiba Hayabusa 64GB", "Toshiba Hayabusa 64GB USB 3.0", "Electronics", "USB Drives", "Toshiba", 699, 65),
-    ("PNY Turbo Attache 4 128GB", "PNY Turbo Attache 4 128GB USB 3.0", "Electronics", "USB Drives", "PNY", 1099, 50),
+    # TVs
+    ("Samsung 55 Crystal 4K", "Samsung 55-inch Crystal 4K UHD TV", "Electronics", "TVs", "Samsung", 44999, 15),
+    ("LG 50 NanoCell 4K", "LG 50-inch NanoCell 4K Smart TV", "Electronics", "TVs", "LG", 42999, 12),
+    ("Sony BRAVIA 55 4K", "Sony BRAVIA 55-inch 4K Google TV", "Electronics", "TVs", "Sony", 59999, 10),
+    ("Xiaomi TV 55 4K", "Xiaomi TV 55-inch 4K LED Smart TV", "Electronics", "TVs", "Xiaomi", 34999, 20),
+    ("TCL 43 4K Google TV", "TCL 43-inch 4K Google TV", "Electronics", "TVs", "TCL", 26999, 25),
+    ("OnePlus TV 43 Y1S Pro", "OnePlus TV 43-inch 4K Y1S Pro", "Electronics", "TVs", "OnePlus", 29999, 22),
+    ("Hisense 50A6K", "Hisense 50-inch 4K UHD Smart TV", "Electronics", "TVs", "Hisense", 32999, 18),
+    ("Samsung 32 HD Smart TV", "Samsung 32-inch HD Smart TV", "Electronics", "TVs", "Samsung", 17999, 30),
+    ("LG 43 Full HD LED", "LG 43-inch Full HD LED Smart TV", "Electronics", "TVs", "LG", 24999, 22),
+    ("VU 43 Premium 4K", "VU 43-inch Premium 4K Android TV", "Electronics", "TVs", "VU", 22999, 25),
 
+    # Printers
     ("HP LaserJet Pro M404dn", "HP LaserJet Pro M404dn Mono Printer", "Electronics", "Printers", "HP", 29999, 12),
     ("Canon PIXMA G3010", "Canon PIXMA G3010 Ink Tank Printer", "Electronics", "Printers", "Canon", 14999, 20),
     ("Epson EcoTank L3210", "Epson EcoTank L3210 Ink Tank Printer", "Electronics", "Printers", "Epson", 13999, 22),
     ("Brother DCP-T426W", "Brother DCP-T426W Ink Tank Printer", "Electronics", "Printers", "Brother", 12999, 18),
     ("HP DeskJet 2331", "HP DeskJet 2331 All-in-One Printer", "Electronics", "Printers", "HP", 5999, 35),
-    ("Canon imageCLASS MF246dn", "Canon MF246dn Laser MFP", "Electronics", "Printers", "Canon", 24999, 10),
-    ("Epson L1210", "Epson L1210 Single Function Ink Tank", "Electronics", "Printers", "Epson", 10999, 25),
-    ("Samsung Xpress M2026", "Samsung Xpress M2026 Mono Laser", "Electronics", "Printers", "Samsung", 15999, 15),
-    ("HP Smart Tank 500", "HP Smart Tank 500 All-in-One", "Electronics", "Printers", "HP", 16999, 20),
-    ("Canon PIXMA E4570", "Canon PIXMA E4570 Ink Tank AIO", "Electronics", "Printers", "Canon", 12499, 22),
 
+    # Projectors
     ("Epson EB-W52", "Epson EB-W52 WXGA Projector", "Electronics", "Projectors", "Epson", 44999, 8),
     ("BenQ MS535A", "BenQ MS535A SVGA Projector", "Electronics", "Projectors", "BenQ", 32999, 10),
     ("Xiaomi Mi Smart Projector 2", "Xiaomi Mi Smart Projector 2 1080p", "Electronics", "Projectors", "Xiaomi", 39999, 12),
-    ("Epson EF-11", "Epson EF-11 Laser Projector", "Electronics", "Projectors", "Epson", 79999, 5),
-    ("ViewSonic PA500S", "ViewSonic PA500S SVGA Projector", "Electronics", "Projectors", "ViewSonic", 29999, 10),
-    ("BenQ TH585P", "BenQ TH585P 1080p Home Projector", "Electronics", "Projectors", "BenQ", 64999, 6),
     ("Unic UC46+", "Unic UC46+ LED Mini Projector", "Electronics", "Projectors", "Unic", 12999, 20),
     ("Portronics Pico+", "Portronics Pico+ Portable Mini Projector", "Electronics", "Projectors", "Portronics", 8999, 25),
-    ("Xiaomi Mi Laser Projector", "Xiaomi Mi Laser Projector 150 inch", "Electronics", "Projectors", "Xiaomi", 59999, 7),
-    ("Samsung The Freestyle", "Samsung The Freestyle Portable Projector", "Electronics", "Projectors", "Samsung", 59999, 8),
 
-    ("Samsung 55\" Crystal 4K", "Samsung 55-inch Crystal 4K UHD TV", "Electronics", "TVs", "Samsung", 44999, 15),
-    ("LG 50\" NanoCell 4K", "LG 50-inch NanoCell 4K Smart TV", "Electronics", "TVs", "LG", 42999, 12),
-    ("Sony BRAVIA 55\" 4K", "Sony BRAVIA 55-inch 4K Google TV", "Electronics", "TVs", "Sony", 59999, 10),
-    ("Xiaomi TV 55\" 4K", "Xiaomi TV 55-inch 4K LED Smart TV", "Electronics", "TVs", "Xiaomi", 34999, 20),
-    ("TCL 43\" 4K Google TV", "TCL 43-inch 4K Google TV", "Electronics", "TVs", "TCL", 26999, 25),
-    ("OnePlus TV 43\" Y1S Pro", "OnePlus TV 43-inch 4K Y1S Pro", "Electronics", "TVs", "OnePlus", 29999, 22),
-    ("Hisense 50A6K", "Hisense 50-inch 4K UHD Smart TV", "Electronics", "TVs", "Hisense", 32999, 18),
-    ("Samsung 32\" HD Smart TV", "Samsung 32-inch HD Smart TV", "Electronics", "TVs", "Samsung", 17999, 30),
-    ("LG 43\" Full HD LED", "LG 43-inch Full HD LED Smart TV", "Electronics", "TVs", "LG", 24999, 22),
-    ("VU 43\" Premium 4K", "VU 43-inch Premium 4K Android TV", "Electronics", "TVs", "VU", 22999, 25),
+    # USB Drives & Accessories
+    ("Samsung T7 500GB", "Samsung T7 Portable SSD 500GB", "Electronics", "Storage", "Samsung", 5999, 40),
+    ("SanDisk Ultra 256GB", "SanDisk Ultra 256GB USB 3.0 Flash Drive", "Electronics", "Storage", "SanDisk", 1799, 60),
+    ("Kingston 128GB USB", "Kingston DataTraveler 128GB USB 3.0", "Electronics", "Storage", "Kingston", 1099, 70),
+    ("HP USB-C Hub", "HP USB-C 7-in-1 Hub Adapter", "Electronics", "Accessories", "HP", 3999, 35),
+    ("Anker USB-C Cable", "Anker USB-C to USB-C 100W Cable 2m", "Electronics", "Accessories", "Anker", 999, 80),
+    ("Belkin Screen Protector", "Belkin Tempered Glass Screen Protector", "Electronics", "Accessories", "Belkin", 699, 90),
+    ("Spigen Case iPhone 15", "Spigen Tough Armor Case iPhone 15 Pro", "Electronics", "Accessories", "Spigen", 1999, 45),
+    ("Ugreen HDMI Cable 2m", "Ugreen 8K HDMI 2.1 Cable 2 Meter", "Electronics", "Accessories", "Ugreen", 899, 55),
+    ("Boat AUX Cable", "boAt 3.5mm AUX Cable 1.5m", "Electronics", "Accessories", "boAt", 299, 100),
+    ("Portronics Car Mount", "Portronics Car Mobile Holder Mount", "Electronics", "Accessories", "Portronics", 599, 65),
 ]
 
-# ──────────────────────────────────────────────────────────
-# 60 GROCERY products
-# ──────────────────────────────────────────────────────────
-GROCERY = [
+GROCERY_PRODUCTS = [
     ("India Gate Basmati Rice 5kg", "Premium long grain basmati rice", "Grocery", "Rice", "India Gate", 649, 100),
     ("Daawat Rozana Basmati 5kg", "Everyday basmati rice for daily meals", "Grocery", "Rice", "Daawat", 499, 120),
     ("Tata Sampann Basmati 1kg", "Premium basmati rice for special dishes", "Grocery", "Rice", "Tata", 149, 150),
     ("Fortune Sunlite Refined 1L", "Sunflower refined oil 1 litre", "Grocery", "Cooking Oil", "Fortune", 179, 200),
     ("Saffola Gold 1L", "Saffola Gold refined cooking oil", "Grocery", "Cooking Oil", "Saffola", 219, 150),
-    ("Fortune Sunburst 1L", "Fortune Sunburst sunflower oil 1L", "Grocery", "Cooking Oil", "Fortune", 189, 180),
-    ("Dalda Vanaspati 1L", "Dalda hydrogenated vegetable oil 1L", "Grocery", "Cooking Oil", "Dalda", 139, 90),
     ("Toor Dal 1kg", "Premium toor dal (arhar dal) 1kg", "Grocery", "Pulses", "Tata Sampann", 159, 200),
     ("Chana Dal 1kg", "High quality chana dal 1kg", "Grocery", "Pulses", "Tata Sampann", 129, 180),
     ("Moong Dal 1kg", "Washed moong dal 1kg pack", "Grocery", "Pulses", "Tata Sampann", 139, 170),
-    ("Masoor Dal 1kg", "Red masoor dal 1kg", "Grocery", "Pulses", "Tata Sampann", 119, 160),
     ("Turmeric Powder 500g", "Pure turmeric powder for cooking", "Grocery", "Spices", "Everest", 79, 250),
     ("Red Chilli Powder 500g", "Kashmiri red chilli powder", "Grocery", "Spices", "Everest", 99, 230),
     ("Garam Masala 100g", "Everest garam masala blend", "Grocery", "Spices", "Everest", 69, 280),
-    ("Coriander Powder 100g", "Fresh ground coriander powder", "Grocery", "Spices", "MDH", 49, 300),
-    ("Cumin Powder 100g", "Jeera powder for Indian cooking", "Grocery", "Spices", "MDH", 59, 260),
     ("Table Salt 1kg", "Tata Salt iodized table salt 1kg", "Grocery", "Salt", "Tata", 28, 500),
     ("Sugar 1kg", "Domestic refined sugar 1kg", "Grocery", "Sugar", "Madhur", 52, 400),
     ("Tata Tea Gold 500g", "Premium CTC tea blend 500g", "Grocery", "Tea", "Tata", 199, 300),
-    ("Brooke Bond Red Label 250g", "Brooke Bond Red Label tea 250g", "Grocery", "Tea", "Brooke Bond", 79, 350),
     ("Nescafe Classic 100g", "Nescafe Classic instant coffee 100g", "Grocery", "Coffee", "Nescafe", 199, 250),
-    ("Bru Instant Coffee 100g", "Bru Green Label instant coffee 100g", "Grocery", "Coffee", "Bru", 169, 280),
     ("Quaker Oats 1kg", "Quaker whole grain rolled oats 1kg", "Grocery", "Oats", "Quaker", 299, 200),
-    ("Saffola Masala Oats 400g", "Saffola Masala Oats 4 pack", "Grocery", "Oats", "Saffola", 128, 180),
-    ("Kellogg's Corn Flakes 475g", "Kellogg's Original Corn Flakes", "Grocery", "Cereals", "Kellogg's", 229, 150),
-    ("Muesli 500g", "Freedom muesli with fruits and nuts", "Grocery", "Cereals", "Freedom", 299, 120),
-    ("Parle-G Biscuit 80g", "Parle-G glucose biscuits 80g", "Grocery", "Biscuits", "Parle", 10, 1000),
-    ("Marie Gold 250g", "Britannia Marie Gold biscuits 250g", "Grocery", "Biscuits", "Britannia", 50, 400),
     ("Maggi Noodles 70g", "Maggi 2-Minute Masala Noodles 70g", "Grocery", "Noodles", "Maggi", 14, 800),
-    ("Yippee Noodles 60g", "Yippee Happy Belly Noodles 60g", "Grocery", "Noodles", "Yippee", 12, 700),
-    ("Maggi Pasta 350g", "Maggi Pazzta Cheesy Tomato 350g", "Grocery", "Pasta", "Maggi", 65, 300),
-    ("Knorr Pasta 350g", "KnorrItaliano Pasta Cheese Tomato", "Grocery", "Pasta", "Knorr", 75, 250),
-    ("Maggi Tomato Ketchup 500g", "Maggi Rich Tomato Ketchup 500g", "Grocery", "Sauces", "Maggi", 99, 300),
-    ("Kissan Mixed Fruit Jam 500g", "Kissan Mixed Fruit Jam 500g", "Grocery", "Sauces", "Kissan", 139, 200),
+    ("Cadbury Dairy Milk 150g", "Cadbury Dairy Milk chocolate 150g", "Grocery", "Chocolates", "Cadbury", 99, 300),
+    ("Parle-G Biscuit 80g", "Parle-G glucose biscuits 80g", "Grocery", "Biscuits", "Parle", 10, 1000),
+    ("Aashirvaad Atta 5kg", "Aashirvaad Select Sharbati Atta 5kg", "Grocery", "Flour", "Aashirvaad", 349, 200),
+    ("Amul Butter 100g", "Amul Pasteurised Butter 100g", "Grocery", "Packaged Foods", "Amul", 56, 300),
     ("Haldirams Aloo Bhujia 200g", "Haldirams Aloo Bhujia snack 200g", "Grocery", "Snacks", "Haldirams", 69, 350),
     ("Lays Classic Salted 52g", "Lays Classic Salted potato chips 52g", "Grocery", "Snacks", "Lays", 20, 600),
-    ("Kurkure Masala Munch 90g", "Kurkure Masala Munch snack 90g", "Grocery", "Snacks", "Kurkure", 20, 500),
-    ("Cadbury Dairy Milk 150g", "Cadbury Dairy Milk chocolate 150g", "Grocery", "Chocolates", "Cadbury", 99, 300),
-    ("Amul Dark Chocolate 40g", "Amul Dark Chocolate 40g bar", "Grocery", "Chocolates", "Amul", 40, 250),
-    ("KitKat 4 Finger 40g", "KitKat 4 Finger wafer chocolate 40g", "Grocery", "Chocolates", "Nestle", 40, 400),
-    ("Frooti Mango 200ml", "Frooti Mango drink 200ml tetra pack", "Grocery", "Beverages", "Frooti", 10, 500),
     ("Real Mango Juice 1L", "Real Fruit Power Mango Juice 1L", "Grocery", "Juices", "Real", 99, 200),
     ("Tropicana Mixed Fruit 1L", "Tropicana Mixed Fruit juice 1L", "Grocery", "Juices", "Tropicana", 119, 180),
-    ("Paper Boat Aamras 200ml", "Paper Boat Aamras mango drink 200ml", "Grocery", "Beverages", "Paper Boat", 20, 400),
-    ("Haldiram Navratan Mix 200g", "Haldirams Navratan Mix snack 200g", "Grocery", "Snacks", "Haldirams", 79, 250),
-    ("Bikano Dal Biji 200g", "Bikano Dal Biji namkeen 200g", "Grocery", "Snacks", "Bikano", 59, 200),
     ("MDH Chana Masala 100g", "MDH Chana Masala spice blend 100g", "Grocery", "Spices", "MDH", 79, 300),
-    ("Aashirvaad Atta 5kg", "Aashirvaad Select Sharbati Atta 5kg", "Grocery", "Flour", "Aashirvaad", 349, 200),
     ("Pillsbury Atta 5kg", "Pillsbury Chakki Fresh Atta 5kg", "Grocery", "Flour", "Pillsbury", 299, 220),
-    ("Patanjali Atta 5kg", "Patanjali Whole Wheat Atta 5kg", "Grocery", "Flour", "Patanjali", 259, 250),
-    ("Tata Sampann Rava 500g", "Tata Sampann Sooji Rava 500g", "Grocery", "Flour", "Tata", 55, 300),
-    ("Besan 500g", "Tata Sampann Besan 500g", "Grocery", "Flour", "Tata", 79, 280),
-    ("Chocos 260g", "Kellogg's Chocos chocolate cereal", "Grocery", "Cereals", "Kellogg's", 179, 200),
     ("Horlicks 500g", "Horlicks Classic Malt 500g health drink", "Grocery", "Cereals", "Horlicks", 279, 180),
-    ("Complan 500g", "Complan Royale Chocolate 500g", "Grocery", "Cereals", "Complan", 299, 150),
     ("Bournvita 500g", "Cadbury Bournvita 500g health drink", "Grocery", "Cereals", "Cadbury", 329, 160),
     ("Pedigree Dog Food 3kg", "Pedigree Adult Dry Dog Food 3kg", "Grocery", "Packaged Foods", "Pedigree", 499, 100),
-    ("Maggi Hot & Sweet 200g", "Maggi Hot & Sweet Chilli Sauce 200g", "Grocery", "Sauces", "Maggi", 79, 250),
-    ("Hellmanns Mayo 300g", "Hellmanns Real Mayonnaise 300g", "Grocery", "Sauces", "Hellmanns", 189, 150),
-    ("Weikfield Corn Flour 100g", "Weikfield Corn Starch 100g", "Grocery", "Packaged Foods", "Weikfield", 45, 200),
-    ("Amul Butter 100g", "Amul Pasteurised Butter 100g", "Grocery", "Packaged Foods", "Amul", 56, 300),
 ]
 
-# ──────────────────────────────────────────────────────────
-# 40 SUPERMARKET products
-# ──────────────────────────────────────────────────────────
-SUPERMARKET = [
+SUPERMARKET_PRODUCTS = [
     ("Surf Excel Matic 1L", "Surf Excel Matic Liquid Detergent 1L", "Supermarket", "Detergents", "Surf Excel", 199, 100),
     ("Tide Original 1kg", "Tide Original Powder Detergent 1kg", "Supermarket", "Detergents", "Tide", 159, 120),
-    ("Ariel Matic 1L", "Ariel Matic Liquid Detergent 1L", "Supermarket", "Detergents", "Ariel", 219, 90),
-    ("Harpic Power Plus 1L", "Harpic Power Plus Toilet Cleaner 1L", "Supermarket", "Cleaning Products", "Harpic", 99, 150),
-    ("Lizol Floor Cleaner 975ml", "Lizol Citrus Floor Cleaner 975ml", "Supermarket", "Cleaning Products", "Lizol", 169, 130),
+    ("Harpic Power Plus 1L", "Harpic Power Plus Toilet Cleaner 1L", "Supermarket", "Cleaning", "Harpic", 99, 150),
+    ("Lizol Floor Cleaner 975ml", "Lizol Citrus Floor Cleaner 975ml", "Supermarket", "Cleaning", "Lizol", 169, 130),
     ("Vim Dishwash Liquid 500ml", "Vim Dishwash Liquid Lemon 500ml", "Supermarket", "Dishwashing", "Vim", 99, 180),
-    ("Pril Dishwasher 500ml", "Pril Dishwashing Liquid 500ml", "Supermarket", "Dishwashing", "Pril", 119, 140),
-    ("Colin Glass Cleaner 500ml", "Colin Glass & Surface Cleaner 500ml", "Supermarket", "Cleaning Products", "Colin", 79, 160),
-    ("Comfort Fabric Conditioner 1L", "Comfort After Wash 1L", "Supermarket", "Detergents", "Comfort", 199, 110),
-    ("Klin Stain Remover 500ml", "Klin Stain Remover Liquid 500ml", "Supermarket", "Cleaning Products", "Klin", 129, 100),
-    ("Kleenex Tissue Box 100s", "Kleenex Facial Tissue 100 pulls", "Supermarket", "Tissues", "Kleenex", 99, 150),
-    ("Tempo Disposable Plates 20pcs", "Tempo Disposable Paper Plates 20pcs", "Supermarket", "Kitchen Supplies", "Tempo", 45, 200),
-    ("Glen Forza Kitchen Rack", "Glen Forza Stainless Steel Kitchen Rack", "Supermarket", "Kitchen Supplies", "Glen", 1299, 25),
-    ("Tupperware Container 1L", "Tupperware Plastic Container 1L", "Supermarket", "Storage Products", "Tupperware", 399, 40),
-    ("Signoraware Container Set", "Signoraware Container Set of 3", "Supermarket", "Storage Products", "Signoraware", 299, 50),
-    ("Prestige STriendly Jar", "Prestige Stainless Steel Jar 750ml", "Supermarket", "Kitchen Supplies", "Prestige", 349, 35),
-    ("Sistema Lunch Box 1L", "Sistema Bento Lunch Box 1L", "Supermarket", "Kitchen Supplies", "Sistema", 499, 30),
+    ("Colin Glass Cleaner 500ml", "Colin Glass & Surface Cleaner 500ml", "Supermarket", "Cleaning", "Colin", 79, 160),
     ("Eveready AA Batteries 10pc", "Eveready Red AA Batteries 10 pack", "Supermarket", "Batteries", "Eveready", 149, 200),
     ("Duracell AA Batteries 8pc", "Duracell Coppertop AA 8 pack", "Supermarket", "Batteries", "Duracell", 299, 120),
-    ("Milton Water Bottle 750ml", "Milton Thermosteel Bottle 750ml", "Supermarket", "Water Bottles", "Milton", 599, 60),
-    ("Cello Opalware Bowl Set", "Cello Opalware Dinner Set 18pc", "Supermarket", "Kitchen Supplies", "Cello", 1499, 30),
-    ("Nayasa Smart Jar Set", "Nayasa Smart Storage Jar Set 6pc", "Supermarket", "Storage Products", "Nayasa", 599, 45),
-    ("Agarwal Brand Store Container", "Agarwal Brand Spice Box Stainless Steel", "Supermarket", "Kitchen Supplies", "Agarwal", 449, 35),
-    ("Scotch Brite Sponge 6pc", "Scotch Brite Heavy Duty Sponge 6 pack", "Supermarket", "Dishwashing", "Scotch Brite", 139, 150),
-    ("Vim Bar 200g", "Vim Dishwash Bar 200g pack of 4", "Supermarket", "Dishwashing", "Vim", 88, 200),
-    ("Odonil Air Freshener 75g", "Odonil Air Freshener Blocks 75g", "Supermarket", "Household Products", "Odonil", 65, 180),
-    ("Hit Insect Spray 400ml", "Hit Insect Killer Spray 400ml", "Supermarket", "Household Products", "Hit", 149, 120),
-    ("Good Knight Refill 2pk", "Good Knight Power Liquid Refill 2pk", "Supermarket", "Household Products", "Good Knight", 99, 150),
-    ("Lysol Disinfectant 500ml", "Lysol Disinfectant Surface Cleaner 500ml", "Supermarket", "Cleaning Products", "Lysol", 179, 100),
-    ("Dettol Liquid 200ml", "Dettol Antiseptic Liquid 200ml", "Supermarket", "Household Products", "Dettol", 89, 200),
-    ("Domex Toilet Cleaner 500ml", "Domex Toilet Cleaner 500ml", "Supermarket", "Cleaning Products", "Domex", 79, 160),
-    ("Bajaj Majesty OTG 36L", "Bajaj Majesty OTG 36L Oven Toaster", "Supermarket", "Kitchen Supplies", "Bajaj", 5999, 15),
-    ("Prestige Induction Cooktop", "Prestige PIC 16.0+ Induction Cooktop", "Supermarket", "Kitchen Supplies", "Prestige", 2999, 25),
-    ("Butterfly Stainless Steel Cooker", "Butterfly Deluxe Plus 5L Pressure Cooker", "Supermarket", "Kitchen Supplies", "Butterfly", 1799, 30),
-    ("Hawkins Futura 3L Kadhai", "Hawkins Futura Non-Stick Kadhai 3L", "Supermarket", "Kitchen Supplies", "Hawkins", 1499, 20),
-    ("Borosil Klip N Store 400ml", "Borosil Klip N Store Glass Container 400ml", "Supermarket", "Storage Products", "Borosil", 349, 40),
-    ("Flipkart Smartpart Storage Bags", "Flipkart Smartpart Ziplock Bags 100pc", "Supermarket", "Storage Products", "Flipkart", 149, 80),
-    ("Nilkamal Plastic Chair", "Nilkamal Freedom HD Plastic Chair", "Supermarket", "Household Products", "Nilkamal", 2299, 30),
-    ("Cello Hexaware Casserole Set", "Cello Hexaware Casserole Set 3pc", "Supermarket", "Kitchen Supplies", "Cello", 1199, 25),
-    ("Prestige Stainless Steel Tawa", "Prestige SS Flat Tawa 26cm", "Supermarket", "Kitchen Supplies", "Prestige", 899, 35),
+    ("Milton Water Bottle 750ml", "Milton Thermosteel Bottle 750ml", "Supermarket", "Kitchen", "Milton", 599, 60),
+    ("Dettol Liquid 200ml", "Dettol Antiseptic Liquid 200ml", "Supermarket", "Health", "Dettol", 89, 200),
+    ("Prestige Induction Cooktop", "Prestige PIC 16.0+ Induction Cooktop", "Supermarket", "Kitchen", "Prestige", 2999, 25),
+    ("Butterfly Cooker 5L", "Butterfly Deluxe Plus 5L Pressure Cooker", "Supermarket", "Kitchen", "Butterfly", 1799, 30),
+    ("Borosil Glass Container 400ml", "Borosil Klip N Store Glass Container", "Supermarket", "Storage", "Borosil", 349, 40),
+    ("Nilkamal Plastic Chair", "Nilkamal Freedom HD Plastic Chair", "Supermarket", "Furniture", "Nilkamal", 2299, 30),
+    ("Cello Dinner Set 18pc", "Cello Opalware Dinner Set 18pc", "Supermarket", "Kitchen", "Cello", 1499, 30),
 ]
 
-# ──────────────────────────────────────────────────────────
-# 50 CLOTHING products
-# ──────────────────────────────────────────────────────────
-CLOTHING = [
-    ("Men's Cotton Round Neck T-Shirt", "Premium cotton round neck t-shirt", "Clothing", "T-shirts", "Allen Solly", 799, 60),
-    ("Men's Polo Collar T-Shirt", "Classic polo t-shirt for men", "Clothing", "T-shirts", "US Polo", 999, 50),
-    ("Men's Slim Fit Formal Shirt", "Slim fit cotton formal shirt", "Clothing", "Shirts", "Arrow", 1499, 40),
-    ("Men's Casual Denim Shirt", "Washed denim casual shirt", "Clothing", "Shirts", "Levis", 1999, 35),
-    ("Women's Kurti Tunic", "Printed cotton kurti for women", "Clothing", "Kurtas", "W", 899, 45),
-    ("Men's Regular Fit Jeans", "Classic regular fit blue jeans", "Clothing", "Jeans", "Levis", 2499, 50),
-    ("Men's Slim Fit Trousers", "Slim fit chino trousers", "Clothing", "Trousers", "Van Heusen", 1799, 40),
-    ("Women's Printed Palazzo", "Floral printed palazzo pants", "Clothing", "Trousers", "W", 699, 55),
-    ("Men's Denim Shorts", "Regular fit denim shorts", "Clothing", "Shorts", "Jack & Jones", 1299, 35),
-    ("Women's Cotton Shorts", "Comfortable cotton casual shorts", "Clothing", "Shorts", "H&M", 599, 50),
-    ("Men's Puffer Jacket", "Lightweight puffer winter jacket", "Clothing", "Jackets", "Decathlon", 2999, 20),
-    ("Women's Hooded Sweatshirt", "Comfortable hooded sweatshirt", "Clothing", "Hoodies", "H&M", 1499, 30),
-    ("Men's Fleece Hoodie", "Zipper fleece hoodie for men", "Clothing", "Hoodies", "Puma", 1999, 25),
-    ("Women's A-Line Dress", "Printed A-line casual dress", "Clothing", "Dresses", "Max", 1299, 30),
-    ("Women's Silk Saree", "Traditional Banarasi silk saree", "Clothing", "Sarees", "Mira", 3999, 15),
-    ("Women's Cotton Leggings", "Comfortable cotton leggings 2 pack", "Clothing", "Leggings", "Jockey", 599, 60),
-    ("Men's Classic White Shirt", "Crisp white cotton formal shirt", "Clothing", "Shirts", "Raymond", 1999, 35),
-    ("Men's Jogger Pants", "Comfortable cotton jogger pants", "Clothing", "Trousers", "Puma", 1799, 40),
-    ("Women's Georgette Saree", "Printed georgette saree with blouse", "Clothing", "Sarees", "Biba", 1499, 25),
-    ("Men's Graphic Print T-Shirt", "Bold graphic print cotton tee", "Clothing", "T-shirts", "Levis", 1199, 45),
-    ("Women's Maxi Dress", "Floral printed maxi dress", "Clothing", "Dresses", "AND", 2499, 20),
-    ("Men's Chino Shorts", "Slim fit chino shorts", "Clothing", "Shorts", "Tommy Hilfiger", 1999, 30),
-    ("Women's Denim Jacket", "Classic blue denim jacket", "Clothing", "Jackets", "Levis", 3499, 15),
-    ("Men's Henley T-Shirt", "Long sleeve henley neck t-shirt", "Clothing", "T-shirts", "Jack & Jones", 899, 40),
-    ("Women's Shrug Cardigan", "Lightweight open front shrug", "Clothing", "Jackets", "W", 799, 35),
-    ("Men's Cargo Pants", "Relaxed fit cargo pants", "Clothing", "Trousers", "Decathlon", 1499, 30),
-    ("Women's Plaid Shirt", "Casual plaid cotton shirt", "Clothing", "Shirts", "H&M", 1299, 25),
-    ("Men's Track Pants", "Athletic track pants with stripes", "Clothing", "Trousers", "Adidas", 2299, 35),
-    ("Women's Anarkali Kurti", "Elegant Anarkali suit kurti", "Clothing", "Kurtas", "Biba", 1999, 20),
-    ("Men's V-Neck Sweater", "Lightweight v-neck sweater", "Clothing", "Hoodies", "Allen Solly", 1799, 18),
-    ("Women's Churidar Set", "Cotton churidar with kurta", "Clothing", "Kurtas", "W", 1299, 25),
-    ("Men's Formal Blazer", "Slim fit single button blazer", "Clothing", "Jackets", "Van Heusen", 3999, 12),
-    ("Kids Graphic T-Shirt", "Fun graphic print t-shirt for kids", "Clothing", "T-shirts", "H&M", 499, 40),
-    ("Kids Denim Jeans", "Stretchable denim jeans for kids", "Clothing", "Jeans", "Levis", 1299, 30),
-    ("Women's Sports Bra", "High impact sports bra", "Clothing", "Sportswear", "Nike", 1999, 25),
-    ("Men's Running Shorts", "Breathable running shorts", "Clothing", "Sportswear", "Nike", 1499, 30),
-    ("Men's Compression Tights", "Athletic compression tights", "Clothing", "Sportswear", "Puma", 1299, 20),
-    ("Women's Yoga Pants", "High waist yoga pants", "Clothing", "Sportswear", "Decathlon", 999, 35),
-    ("Men's Polo T-Shirt 3 Pack", "3 pack cotton polo t-shirts", "Clothing", "T-shirts", "Jockey", 1499, 40),
-    ("Women's Cotton Night Suit", "Comfortable cotton night suit set", "Clothing", "Innerwear", "Jockey", 899, 45),
-    ("Men's Boxer Briefs 3pk", "Cotton boxer briefs 3 pack", "Clothing", "Innerwear", "Jockey", 699, 50),
-    ("Women's Cotton Bra 3pk", "Non-wired cotton bras 3 pack", "Clothing", "Innerwear", "Jockey", 999, 40),
-    ("Men's Ankle Socks 5pk", "Cotton ankle socks 5 pack", "Clothing", "Socks", "Puma", 499, 60),
-    ("Women's Knee High Socks 3pk", "Cotton knee high socks 3 pack", "Clothing", "Socks", "H&M", 399, 50),
-    ("Kids Winter Jacket", "Warm padded winter jacket for kids", "Clothing", "Jackets", "Decathlon", 1799, 20),
-    ("Women's Silk Blend Kurta", "Elegant silk blend kurta", "Clothing", "Kurtas", "Fabindia", 2499, 15),
-    ("Men's Linen Shirt", "Pure linen casual shirt", "Clothing", "Shirts", "Fabindia", 2499, 18),
-    ("Women's Cotton Saree", "Handloom cotton saree", "Clothing", "Sarees", "Fabindia", 1999, 20),
-    ("Men's Flex Shorts", "Stretchable active shorts", "Clothing", "Shorts", "Decathlon", 799, 40),
-    ("Women's Knit Cardigan", "Cozy knit open cardigan", "Clothing", "Hoodies", "H&M", 1799, 22),
+CLOTHING_PRODUCTS = [
+    ("Men's Cotton Round Neck T-Shirt", "Premium cotton round neck t-shirt", "Fashion", "T-shirts", "Allen Solly", 799, 60),
+    ("Men's Polo Collar T-Shirt", "Classic polo t-shirt for men", "Fashion", "T-shirts", "US Polo", 999, 50),
+    ("Men's Slim Fit Formal Shirt", "Slim fit cotton formal shirt", "Fashion", "Shirts", "Arrow", 1499, 40),
+    ("Men's Regular Fit Jeans", "Classic regular fit blue jeans", "Fashion", "Jeans", "Levis", 2499, 50),
+    ("Men's Slim Fit Trousers", "Slim fit chino trousers", "Fashion", "Trousers", "Van Heusen", 1799, 40),
+    ("Women's Kurti Tunic", "Printed cotton kurti for women", "Fashion", "Kurtas", "W", 899, 45),
+    ("Men's Fleece Hoodie", "Zipper fleece hoodie for men", "Fashion", "Hoodies", "Puma", 1999, 25),
+    ("Women's A-Line Dress", "Printed A-line casual dress", "Fashion", "Dresses", "Max", 1299, 30),
+    ("Women's Silk Saree", "Traditional Banarasi silk saree", "Fashion", "Sarees", "Mira", 3999, 15),
+    ("Men's Puffer Jacket", "Lightweight puffer winter jacket", "Fashion", "Jackets", "Decathlon", 2999, 20),
+    ("Men's Denim Shorts", "Regular fit denim shorts", "Fashion", "Shorts", "Jack & Jones", 1299, 35),
+    ("Women's Hooded Sweatshirt", "Comfortable hooded sweatshirt", "Fashion", "Hoodies", "H&M", 1499, 30),
+    ("Men's Graphic Print T-Shirt", "Bold graphic print cotton tee", "Fashion", "T-shirts", "Levis", 1199, 45),
+    ("Women's Maxi Dress", "Floral printed maxi dress", "Fashion", "Dresses", "AND", 2499, 20),
+    ("Men's Chino Shorts", "Slim fit chino shorts", "Fashion", "Shorts", "Tommy Hilfiger", 1999, 30),
+    ("Women's Denim Jacket", "Classic blue denim jacket", "Fashion", "Jackets", "Levis", 3499, 15),
+    ("Men's Henley T-Shirt", "Long sleeve henley neck t-shirt", "Fashion", "T-shirts", "Jack & Jones", 899, 40),
+    ("Men's Cargo Pants", "Relaxed fit cargo pants", "Fashion", "Trousers", "Decathlon", 1499, 30),
+    ("Men's Track Pants", "Athletic track pants with stripes", "Fashion", "Trousers", "Adidas", 2299, 35),
+    ("Women's Anarkali Kurti", "Elegant Anarkali suit kurti", "Fashion", "Kurtas", "Biba", 1999, 20),
+    ("Men's Formal Blazer", "Slim fit single button blazer", "Fashion", "Jackets", "Van Heusen", 3999, 12),
+    ("Women's Cotton Leggings", "Comfortable cotton leggings 2 pack", "Fashion", "Leggings", "Jockey", 599, 60),
+    ("Kids Graphic T-Shirt", "Fun graphic print t-shirt for kids", "Fashion", "T-shirts", "H&M", 499, 40),
+    ("Kids Denim Jeans", "Stretchable denim jeans for kids", "Fashion", "Jeans", "Levis", 1299, 30),
+    ("Men's Polo T-Shirt 3 Pack", "3 pack cotton polo t-shirts", "Fashion", "T-shirts", "Jockey", 1499, 40),
+    ("Women's Sports Bra", "High impact sports bra", "Fashion", "Sportswear", "Nike", 1999, 25),
+    ("Men's Running Shorts", "Breathable running shorts", "Fashion", "Sportswear", "Nike", 1499, 30),
+    ("Women's Yoga Pants", "High waist yoga pants", "Fashion", "Sportswear", "Decathlon", 999, 35),
+    ("Men's Jogger Pants", "Comfortable cotton jogger pants", "Fashion", "Trousers", "Puma", 1799, 40),
+    ("Women's Georgette Saree", "Printed georgette saree with blouse", "Fashion", "Sarees", "Biba", 1499, 25),
 ]
 
-# ──────────────────────────────────────────────────────────
-# 30 FOOTWEAR products
-# ──────────────────────────────────────────────────────────
-FOOTWEAR = [
-    ("Nike Revolution 6", "Nike Revolution 6 Running Shoes", "Footwear", "Running Shoes", "Nike", 3995, 30),
-    ("Adidas Duramo Speed", "Adidas Duramo Speed Running Shoes", "Footwear", "Running Shoes", "Adidas", 5999, 25),
-    ("Puma Deviate Nitro 2", "Puma Deviate Nitro 2 Running Shoes", "Footwear", "Running Shoes", "Puma", 8999, 15),
-    ("ASICS Gel-Nimbus 25", "ASICS Gel-Nimbus 25 Running Shoes", "Footwear", "Running Shoes", "ASICS", 12999, 10),
-    ("New Balance 574", "New Balance 574 Classic Sneakers", "Footwear", "Casual Shoes", "New Balance", 8999, 20),
-    ("Nike Air Max 90", "Nike Air Max 90 Classic Sneakers", "Footwear", "Casual Shoes", "Nike", 11999, 18),
-    ("Adidas Stan Smith", "Adidas Stan Smith Classic White", "Footwear", "Casual Shoes", "Adidas", 7999, 22),
-    ("Puma Smash V2", "Puma Smash V2 Classic Sneakers", "Footwear", "Casual Shoes", "Puma", 4999, 30),
-    ("Woodland Men's Boots", "Woodland Leather Casual Boots", "Footwear", "Casual Shoes", "Woodland", 3999, 25),
-    ("Bata Men's Formal Shoes", "Bata Leather Formal Derby Shoes", "Footwear", "Formal Shoes", "Bata", 2999, 35),
-    ("Clarks Formal Oxford", "Clarks Men's Formal Oxford Shoes", "Footwear", "Formal Shoes", "Clarks", 7999, 12),
-    ("Red Tape Formal Loafer", "Red Tape Men's Formal Loafer", "Footwear", "Formal Shoes", "Red Tape", 2499, 30),
-    ("Liberty Action Shoes", "Liberty Men's Sports Running Shoes", "Footwear", "Sports Shoes", "Liberty", 1499, 40),
-    ("Nivia Storm Football Shoe", "Nivia Storm Turf Football Shoe", "Footwear", "Sports Shoes", "Nivia", 799, 50),
-    ("Campus Running Shoes", "Campus Men's Running Shoes Oxyfit", "Footwear", "Running Shoes", "Campus", 1299, 45),
-    ("Paragon Floaters Men", "Paragon Floaters Casual Sandals", "Footwear", "Sandals", "Paragon", 499, 80),
-    ("Crocs Classic Clog", "Crocs Classic Unisex Clog", "Footwear", "Sandals", "Crocs", 2999, 25),
-    ("Bata Flippers", "Bata Men's Flippers Slippers", "Footwear", "Slippers", "Bata", 349, 70),
-    ("Hawai Slippers", "Hawai Classic Rubber Slippers", "Footwear", "Slippers", "Hawai", 199, 100),
-    ("Nike Sunray Protect", "Nike Sunray Protect 2 Sandals", "Footwear", "Sandals", "Nike", 2999, 20),
-    ("Sparx Sports Shoes", "Sparx Men's Sports Running Shoes", "Footwear", "Sports Shoes", "Sparx", 999, 60),
-    ("ASICS Gel-Kayano 30", "ASICS Gel-Kayano 30 Stability Shoes", "Footwear", "Running Shoes", "ASICS", 15999, 8),
-    ("Reebok Classic Leather", "Reebok Classic Leather Sneakers", "Footwear", "Casual Shoes", "Reebok", 6999, 22),
-    ("Under Armour Charged Assert", "UA Charged Assert 9 Running Shoes", "Footwear", "Running Shoes", "Under Armour", 6999, 18),
-    ("Crocs literide 360", "Crocs Literide 360 Clog", "Footwear", "Sandals", "Crocs", 3999, 20),
-    ("Hush Puppies Oxford", "Hush Puppies Men's Formal Oxford", "Footwear", "Formal Shoes", "Hush Puppies", 6999, 15),
-    ("Bata Kids School Shoes", "Bata Kids Velcro School Shoes", "Footwear", "School Shoes", "Bata", 999, 40),
-    ("Lancer Sports Shoes", "Lancer Men's Sports Running Shoes", "Footwear", "Sports Shoes", "Lancer", 699, 55),
-    ("Birkenstock Arizona", "Birkenstock Arizona Soft Footbed", "Footwear", "Sandals", "Birkenstock", 4999, 12),
-    ("Woodland Sandals", "Woodland Men's Leather Sandals", "Footwear", "Sandals", "Woodland", 1999, 25),
+FOOTWEAR_PRODUCTS = [
+    ("Nike Revolution 6", "Nike Revolution 6 Running Shoes", "Fashion", "Running Shoes", "Nike", 3995, 30),
+    ("Adidas Duramo Speed", "Adidas Duramo Speed Running Shoes", "Fashion", "Running Shoes", "Adidas", 5999, 25),
+    ("Puma Deviate Nitro 2", "Puma Deviate Nitro 2 Running Shoes", "Fashion", "Running Shoes", "Puma", 8999, 15),
+    ("ASICS Gel-Nimbus 25", "ASICS Gel-Nimbus 25 Running Shoes", "Fashion", "Running Shoes", "ASICS", 12999, 10),
+    ("New Balance 574", "New Balance 574 Classic Sneakers", "Fashion", "Casual Shoes", "New Balance", 8999, 20),
+    ("Nike Air Max 90", "Nike Air Max 90 Classic Sneakers", "Fashion", "Casual Shoes", "Nike", 11999, 18),
+    ("Adidas Stan Smith", "Adidas Stan Smith Classic White", "Fashion", "Casual Shoes", "Adidas", 7999, 22),
+    ("Puma Smash V2", "Puma Smash V2 Classic Sneakers", "Fashion", "Casual Shoes", "Puma", 4999, 30),
+    ("Woodland Men's Boots", "Woodland Leather Casual Boots", "Fashion", "Boots", "Woodland", 3999, 25),
+    ("Bata Men's Formal Shoes", "Bata Leather Formal Derby Shoes", "Fashion", "Formal Shoes", "Bata", 2999, 35),
+    ("Clarks Formal Oxford", "Clarks Men's Formal Oxford Shoes", "Fashion", "Formal Shoes", "Clarks", 7999, 12),
+    ("Red Tape Formal Loafer", "Red Tape Men's Formal Loafer", "Fashion", "Formal Shoes", "Red Tape", 2499, 30),
+    ("Crocs Classic Clog", "Crocs Classic Unisex Clog", "Fashion", "Sandals", "Crocs", 2999, 25),
+    ("Campus Running Shoes", "Campus Men's Running Shoes Oxyfit", "Fashion", "Running Shoes", "Campus", 1299, 45),
+    ("Sparx Sports Shoes", "Sparx Men's Sports Running Shoes", "Fashion", "Sports Shoes", "Sparx", 999, 60),
+    ("Reebok Classic Leather", "Reebok Classic Leather Sneakers", "Fashion", "Casual Shoes", "Reebok", 6999, 22),
+    ("Under Armour Charged Assert", "UA Charged Assert 9 Running Shoes", "Fashion", "Running Shoes", "Under Armour", 6999, 18),
+    ("Birkenstock Arizona", "Birkenstock Arizona Soft Footbed", "Fashion", "Sandals", "Birkenstock", 4999, 12),
+    ("Hush Puppies Oxford", "Hush Puppies Men's Formal Oxford", "Fashion", "Formal Shoes", "Hush Puppies", 6999, 15),
+    ("Nike Sunray Protect", "Nike Sunray Protect 2 Sandals", "Fashion", "Sandals", "Nike", 2999, 20),
 ]
 
-# ──────────────────────────────────────────────────────────
-# 40 ACCESSORIES products
-# ──────────────────────────────────────────────────────────
-ACCESSORIES = [
-    ("WildHorn Leather Wallet", "Genuine leather bifold wallet", "Accessories", "Wallets", "WildHorn", 899, 45),
-    ("Allen Solly Slim Wallet", "RFID blocking slim wallet", "Accessories", "Wallets", "Allen Solly", 1299, 35),
-    ("Tommy Hilfiger Wallet", "Tommy Hilfiger Men's Classic Wallet", "Accessories", "Wallets", "Tommy Hilfiger", 2499, 20),
-    ("Formal Leather Belt", "Genuine leather formal belt", "Accessories", "Belts", "Allen Solly", 999, 40),
-    ("Casual Woven Belt", "Casual fabric woven belt for men", "Accessories", "Belts", "H&M", 499, 50),
-    ("Wildcraft Backpack 32L", "Wildcraft 32L Laptop Backpack", "Accessories", "Backpacks", "Wildcraft", 2499, 30),
-    ("Skybags Laptop Backpack", "Skybags 27L Laptop Backpack", "Accessories", "Backpacks", "Skybags", 1999, 35),
-    ("American Tourister Backpack", "American Tourister 32L Backpack", "Accessories", "Backpacks", "American Tourister", 2999, 25),
-    ("Safari Pentagon Trolley Bag", "Safari 55cm Hardside Trolley Bag", "Accessories", "Travel Bags", "Safari", 3999, 20),
-    ("Antler Suited Carry On", "Antler 55cm Polycarbonate Trolley", "Accessories", "Travel Bags", "Antler", 5999, 12),
-    ("Lino Perros Handbag", "Women's Faux Leather Handbag", "Accessories", "Handbags", "Lino Perros", 1499, 30),
-    ("Lavie Crossbody Bag", "Lavie Women's Crossbody Sling Bag", "Accessories", "Handbags", "Lavie", 1999, 25),
-    ("Fastrack Sunglasses", "Fastrack UV400 Sunglasses", "Accessories", "Sunglasses", "Fastrack", 799, 45),
-    ("Ray-Ban Aviator", "Ray-Ban Classic Aviator Sunglasses", "Accessories", "Sunglasses", "Ray-Ban", 8999, 10),
-    ("Fossil Analog Watch", "Fossil Men's Analog Stainless Steel Watch", "Accessories", "Watches", "Fossil", 8999, 15),
-    ("Casio G-Shock", "Casio G-Shock Digital Watch", "Accessories", "Watches", "Casio", 9999, 12),
-    ("Titan Raga Watch", "Titan Raga Women's Analog Watch", "Accessories", "Watches", "Titan", 3999, 25),
-    ("Capsule Travel Cap", "Adjustable cotton travel cap", "Accessories", "Caps", "Puma", 499, 50),
-    ("Nike Running Cap", "Nike Dri-FIT Running Cap", "Accessories", "Caps", "Nike", 799, 35),
-    ("Safari Laptop Bag", "Safari 15.6 inch Laptop Messenger", "Accessories", "Laptop Bags", "Safari", 1499, 30),
-    ("HP Laptop Backpack", "HP Bumper 15.6 inch Backpack", "Accessories", "Laptop Bags", "HP", 1999, 25),
-    ("Spigen iPhone 15 Case", "Spigen Liquid Air Case iPhone 15", "Accessories", "Phone Cases", "Spigen", 999, 50),
-    ("Tempered Glass Screen Guard", "9H Tempered Glass Screen Guard", "Accessories", "Phone Cases", "Generic", 299, 100),
-    ("Samsung S24 Ultra Case", "Samsung Official Clear Case S24 Ultra", "Accessories", "Phone Cases", "Samsung", 1499, 30),
-    ("OnePlus 12 Case", "OnePlus Sandstone Case OnePlus 12", "Accessories", "Phone Cases", "OnePlus", 799, 40),
-    ("Keychain LED Light", "Aluminum LED Light Keychain", "Accessories", "Keychains", "Generic", 199, 80),
-    ("Leather Key Holder", "Genuine leather key holder pouch", "Accessories", "Keychains", "WildHorn", 399, 45),
-    ("Apple AirTag 4 Pack", "Apple AirTag 4 Pack Tracker", "Accessories", "Keychains", "Apple", 9900, 15),
-    ("Safari Card Holder", "Safari Slim Card Holder Wallet", "Accessories", "Wallets", "Safari", 699, 40),
-    ("Wildcraft Gym Bag", "Wildcraft 20L Duffel Gym Bag", "Accessories", "Travel Bags", "Wildcraft", 1499, 25),
-    ("Allen Solly Men's Sunglasses", "Polarized UV400 Sunglasses", "Accessories", "Sunglasses", "Allen Solly", 1299, 30),
-    ("Casio Edifice Watch", "Casio Edifice Chronograph Watch", "Accessories", "Watches", "Casio", 12999, 8),
-    ("Fastrack Analog Watch", "Fastrack Men's Casual Analog Watch", "Accessories", "Watches", "Fastrack", 2499, 25),
-    ("Daniel Klein Watch", "Daniel Klein Men's Chrono Watch", "Accessories", "Watches", "Daniel Klein", 3499, 18),
-    ("Lavie Women's Tote Bag", "Lavie Women's Nylon Tote Bag", "Accessories", "Handbags", "Lavie", 2499, 20),
-    ("American Tourister Sling", "AT Cross Body Sling Bag", "Accessories", "Travel Bags", "American Tourister", 1299, 30),
-    ("Premium Sunglasses Case", "Hard Shell Sunglasses Carrying Case", "Accessories", "Sunglasses", "Generic", 299, 60),
-    ("Samsung Galaxy Watch Band", "Silicone Replacement Band 20mm", "Accessories", "Phone Cases", "Generic", 499, 45),
-    ("Apple Watch Strap", "Silicone Sport Band 42/44mm", "Accessories", "Phone Cases", "Generic", 399, 50),
-    ("Nomad Slim Wallet", "Nomad Rugged Slim Leather Wallet", "Accessories", "Wallets", "Nomad", 1999, 15),
+ACCESSORIES_PRODUCTS = [
+    ("WildHorn Leather Wallet", "Genuine leather bifold wallet", "Fashion", "Wallets", "WildHorn", 899, 45),
+    ("Allen Solly Slim Wallet", "RFID blocking slim wallet", "Fashion", "Wallets", "Allen Solly", 1299, 35),
+    ("Tommy Hilfiger Wallet", "Tommy Hilfiger Men's Classic Wallet", "Fashion", "Wallets", "Tommy Hilfiger", 2499, 20),
+    ("Formal Leather Belt", "Genuine leather formal belt", "Fashion", "Belts", "WildHorn", 699, 50),
+    ("Nike Sport Sunglasses", "Nike Sports UV400 Sunglasses", "Fashion", "Sunglasses", "Nike", 2499, 25),
+    ("Ray-Ban Aviator", "Ray-Ban Classic Aviator Sunglasses", "Fashion", "Sunglasses", "Ray-Ban", 8999, 10),
+    ("Fastrack Analog Watch", "Fastrack Men's Analog Watch", "Fashion", "Watches", "Fastrack", 2499, 35),
+    ("Casio G-Shock", "Casio G-Shock Digital Watch", "Fashion", "Watches", "Casio", 9999, 15),
+    ("Titan Raga Watch", "Titan Raga Women's Analog Watch", "Fashion", "Watches", "Titan", 4999, 20),
+    ("Puma Backpack", "Puma Unisex Solid Backpack 25L", "Fashion", "Bags", "Puma", 2499, 30),
+    ("American Tourister Trolley", "American Tourister 55cm Trolley Bag", "Fashion", "Bags", "American Tourister", 5999, 15),
+    ("Wildcraft Laptop Bag", "Wildcraft 15.6 inch Laptop Backpack", "Fashion", "Bags", "Wildcraft", 1999, 40),
+    ("Fastrack Backpack", "Fastrack Casual Backpack 30L", "Fashion", "Bags", "Fastrack", 1499, 35),
+    ("Sonata Digital Watch", "Sonata Men's Digital Sports Watch", "Fashion", "Watches", "Sonata", 799, 60),
+    ("WildHorn Belt Pack", "WildHorn Men's Leather Belt", "Fashion", "Belts", "WildHorn", 899, 40),
 ]
 
-# ──────────────────────────────────────────────────────────
-# 40 HOME & KITCHEN products
-# ──────────────────────────────────────────────────────────
-HOME_KITCHEN = [
-    ("Prestige Induction Base Cooker", "Prestige Popular Plus 5L Pressure Cooker", "Home & Kitchen", "Cookware", "Prestige", 1899, 30),
-    ("Hawkins Contura Cooker", "Hawkins Contura Hard Anodized 3L", "Home & Kitchen", "Cookware", "Hawkins", 1699, 25),
-    ("Butterfly Stainless Steel Set", "Butterfly SS 3 Piece Cookware Set", "Home & Kitchen", "Cookware", "Butterfly", 2999, 20),
-    ("Prestige Non-Stick Tawa", "Prestige Omega Select 26cm Tawa", "Home & Kitchen", "Cookware", "Prestige", 799, 35),
-    ("Prestige Mixer Grinder", "Prestige Iris 750W Mixer Grinder", "Home & Kitchen", "Mixers", "Prestige", 2999, 25),
-    ("Bajaj Rex Mixer Grinder", "Bajaj Rex 500W Mixer Grinder", "Home & Kitchen", "Mixers", "Bajaj", 1999, 30),
-    ("Philips Mixer Grinder", "Philips HL7756 750W Mixer Grinder", "Home & Kitchen", "Mixers", "Philips", 3999, 20),
-    ("Preethi Blue Leaf Mixer", "Preethi Blue Leaf Platinum 750W", "Home & Kitchen", "Mixers", "Preethi", 3499, 22),
-    ("Bajaj Induction Cooktop", "Bajaj ICX Induction Cooktop", "Home & Kitchen", "Induction Cooktops", "Bajaj", 2199, 30),
-    ("Prestige Induction Cooktop", "Prestige PIC 20.0+ Induction", "Home & Kitchen", "Induction Cooktops", "Prestige", 2499, 28),
-    ("Butterfly Induction Cooktop", "Butterfly Blitz 1600W Induction", "Home & Kitchen", "Induction Cooktops", "Butterfly", 2799, 25),
-    ("Prestige Electric Kettle", "Prestige PKOSS 1.5L Electric Kettle", "Home & Kitchen", "Electric Kettles", "Prestige", 799, 40),
-    ("Bajaj Electric Kettle", "Bajaj Grand 1.7L Electric Kettle", "Home & Kitchen", "Electric Kettles", "Bajaj", 699, 45),
-    ("Havells Electric Kettle", "Havells Crown 1.7L Electric Kettle", "Home & Kitchen", "Electric Kettles", "Havells", 999, 35),
-    ("Prestige SS Container Set", "Prestige Stainless Steel Container 3pc", "Home & Kitchen", "Storage Containers", "Prestige", 999, 30),
-    ("Milton Thermosteel Bottle", "Milton Thermosteel 750ml Bottle", "Home & Kitchen", "Storage Containers", "Milton", 549, 50),
-    ("Signoraware Container Set", "Signoraware 4pc Storage Container", "Home & Kitchen", "Storage Containers", "Signoraware", 399, 45),
-    ("Wakefit Ortho Mattress", "Wakefit Orthopedic Memory Foam Queen", "Home & Kitchen", "Bedsheets", "Wakefit", 8999, 15),
-    ("Solimo Bedsheet King Size", "Amazon Solimo Cotton Bedsheet King", "Home & Kitchen", "Bedsheets", "Solimo", 899, 40),
-    ("Bombay Dyeing Bedsheet", "Bombay Dyeing Cotton Bedsheet Double", "Home & Kitchen", "Bedsheets", "Bombay Dyeing", 1499, 30),
-    ("Wakefit Dreamlite Pillow", "Wakefit Microfiber Soft Pillow 2pc", "Home & Kitchen", "Pillows", "Wakefit", 699, 40),
-    ("Kurl-On Dreamz Pillow", "Kurl-On Dreamz Fibre Pillow", "Home & Kitchen", "Pillows", "Kurl-On", 499, 50),
-    ("Syska LED Table Lamp", "Syska SSK-RDL-9W LED Table Lamp", "Home & Kitchen", "Lamps", "Syska", 799, 35),
-    ("Philips LED Desk Lamp", "Philips3000 LED Desk Lamp EyeComfort", "Home & Kitchen", "Lamps", "Philips", 2499, 20),
-    ("IKEA TRÅDFRI Desk Lamp", "IKEA TRÅDFRI LED Work Lamp", "Home & Kitchen", "Lamps", "IKEA", 1999, 15),
-    ("Prestige Electric Cooker", "Prestige PRWO 1.8-2 Electric Rice Cooker", "Home & Kitchen", "Kitchen Appliances", "Prestige", 2499, 25),
-    ("Bajaj Majesty OTG 25L", "Bajaj Majesty OTG 25L Oven", "Home & Kitchen", "Kitchen Appliances", "Bajaj", 4499, 18),
-    ("Philips Air Fryer", "Philips Airfryer HD9200 4.1L", "Home & Kitchen", "Kitchen Appliances", "Philips", 8999, 12),
-    ("Prestige Air Fryer", "Prestige PAF 6.0 2.2L Air Fryer", "Home & Kitchen", "Kitchen Appliances", "Prestige", 6999, 15),
-    ("Borosil Glass Set", "Borosil Klip N Store Glass Set 3pc", "Home & Kitchen", "Storage Containers", "Borosil", 1199, 30),
-    ("IKEA KALLAX Shelf", "IKEA KALLAX Shelf Unit 4x2 White", "Home & Kitchen", "Furniture Accessories", "IKEA", 7999, 8),
-    ("IKEA MICKE Desk", "IKEA MICKE Desk 105x45cm", "Home & Kitchen", "Furniture Accessories", "IKEA", 5999, 10),
-    ("IKEA LACK Side Table", "IKEA LACK Side Table 55x55cm", "Home & Kitchen", "Furniture Accessories", "IKEA", 1299, 20),
-    ("Cello Opalware Thali Set", "Cello Opalware Dinner Thali Set 4pc", "Home & Kitchen", "Cookware", "Cello", 1199, 25),
-    ("Prestige Frying Pan", "Prestige Hard Anodized Frying Pan 24cm", "Home & Kitchen", "Cookware", "Prestige", 649, 35),
-    ("Hawkins Futura Kadhai", "Hawkins Futura Hard Anodized Kadhai 3L", "Home & Kitchen", "Cookware", "Hawkins", 1299, 28),
-    ("Butterfly Stainless Steel Tumbler", "Butterfly SS Tumbler Set 4pc", "Home & Kitchen", "Utensils", "Butterfly", 599, 40),
-    ("Milton Insulated Casserole", "Milton Insulated Casserole 1L", "Home & Kitchen", "Utensils", "Milton", 499, 35),
-    ("Prestige Spatula Set", "Prestige Nylon Spatula Set 3pc", "Home & Kitchen", "Utensils", "Prestige", 349, 45),
-    ("IKEA KORKEN Jar Set", "IKEA KORKEN Glass Jar Set 3pc", "Home & Kitchen", "Storage Containers", "IKEA", 599, 30),
-]
 
 # ──────────────────────────────────────────────────────────
-# 30 PERSONAL CARE products
+# Generator functions to scale up to 10,000+ products
 # ──────────────────────────────────────────────────────────
-PERSONAL_CARE = [
-    ("Head & Shoulders Shampoo 400ml", "H&S Cool Menthol Shampoo 400ml", "Personal Care", "Shampoo", "Head & Shoulders", 289, 80),
-    ("Dove Shampoo 340ml", "Dove Hair Fall Rescue Shampoo 340ml", "Personal Care", "Shampoo", "Dove", 299, 75),
-    ("Pantene Shampoo 340ml", "Pantene Advanced Hair Fall Solution", "Personal Care", "Shampoo", "Pantene", 279, 80),
-    (" Clinic Plus Shampoo 175ml", "Clinic Plus Strong & Long Shampoo", "Personal Care", "Shampoo", "Clinic Plus", 99, 100),
-    ("Nivea Men Soap 150g", "Nivea Men Deep Impact Soap 150g", "Personal Care", "Soap", "Nivea", 129, 90),
-    ("Dettol Soap 75g", "Dettol Original Soap 75g", "Personal Care", "Soap", "Dettol", 42, 150),
-    ("Pears Pure Glycerine Soap 125g", "Pears Pure Glycerine Gentle Soap", "Personal Care", "Soap", "Pears", 75, 120),
-    ("Lifebuoy Soap 150g", "Lifebuoy Total 10 Soap 150g", "Personal Care", "Soap", "Lifebuoy", 55, 130),
-    ("Colgate MaxFresh 150g", "Colgate MaxFresh Toothpaste 150g", "Personal Care", "Toothpaste", "Colgate", 99, 100),
-    ("Pepsodent Germ Check 150g", "Pepsodent Germ Check Plus Toothpaste", "Personal Care", "Toothpaste", "Pepsodent", 79, 110),
-    ("Sensodyne Sensitive 75g", "Sensodyne Toothpaste for Sensitive", "Personal Care", "Toothpaste", "Sensodyne", 119, 90),
-    ("Himalaya Face Wash 100ml", "Himalaya Neem Face Wash 100ml", "Personal Care", "Skincare", "Himalaya", 170, 80),
-    ("Nivea Moisturizer 100ml", "Nivea Soft Light Moisturizer 100ml", "Personal Care", "Skincare", "Nivea", 199, 70),
-    ("Garnier SkinBright Serum", "Garnier Bright Complete Vitamin C Serum", "Personal Care", "Skincare", "Garnier", 299, 50),
-    ("Mamaearth Vitamin C Face Cream", "Mamaearth Vitamin C Face Cream 50ml", "Personal Care", "Skincare", "Mamaearth", 399, 40),
-    ("Himalaya Herbals Hair Oil 200ml", "Himalaya Anti-Hair Fall Hair Oil", "Personal Care", "Haircare", "Himalaya", 199, 60),
-    ("Parachute Coconut Oil 300ml", "Parachute 100% Pure Coconut Oil", "Personal Care", "Haircare", "Parachute", 169, 80),
-    ("Bajaj Almond Drops 200ml", "Bajaj Almond Drops Hair Oil 200ml", "Personal Care", "Haircare", "Bajaj", 199, 70),
-    ("Set Wet Hair Gel 100ml", "Set Wet Cool Gel 100ml", "Personal Care", "Haircare", "Set Wet", 99, 60),
-    ("Gillette Mach3 Razor", "Gillette Mach3 Cartridge Razor", "Personal Care", "Grooming Products", "Gillette", 189, 50),
-    ("Philips Trimmer 3000", "Philips Multigroom Series 3000", "Personal Care", "Grooming Products", "Philips", 1199, 30),
-    ("Nivea Men Deodorant 150ml", "Nivea Men Power Deodorant 150ml", "Personal Care", "Deodorants", "Nivea", 249, 60),
-    ("Wild Stone Deodorant 150ml", "Wild Stone Ultra Sensual Deo 150ml", "Personal Care", "Deodorants", "Wild Stone", 199, 70),
-    ("Axe Deodorant 150ml", "Axe Dark Temptation Deo 150ml", "Personal Care", "Deodorants", "Axe", 229, 65),
-    ("Dove Body Wash 250ml", "Dove Deeply Nourishing Body Wash", "Personal Care", "Personal Hygiene", "Dove", 249, 50),
-    ("Nivea Body Lotion 200ml", "Nivea Body Milk Lotion 200ml", "Personal Care", "Personal Hygiene", "Nivea", 299, 45),
-    ("Vaseline Body Lotion 400ml", "Vaseline Intensive Care Body Lotion", "Personal Care", "Personal Hygiene", "Vaseline", 299, 55),
-    ("Himalaya Under Eye Cream", "Himalaya Under Eye Cream 10ml", "Personal Care", "Skincare", "Himalaya", 170, 40),
-    ("Boroline Antiseptic 60g", "Boroline Antiseptic Ayurvedic Cream", "Personal Care", "Skincare", "Boroline", 39, 100),
-    ("VLCC Face Wash 100ml", "VLCC Insta Glow Diamond Bleach", "Personal Care", "Skincare", "VLCC", 249, 35),
-]
+
+def generate_variant_products(base_products, target_multiplier=5):
+    """Generate variants of base products to reach target count."""
+    variants = list(base_products)
+    brands_extra = ["TechBrand", "ProLine", "ValueMax", "EliteSeries", "SmartChoice", "PrimeGoods", "QualityFirst", "BestBuy"]
+
+    for name, desc, cat, sub, brand, price, stock in base_products:
+        for i in range(target_multiplier - 1):
+            new_brand = brands_extra[i % len(brands_extra)]
+            new_price = round(price * random.uniform(0.7, 1.5), 0)
+            new_stock = random.randint(10, 100)
+            variant_name = f"{new_brand} {sub} {name.split()[-1]} {i+2}"
+            variant_desc = f"{new_brand} alternative to {name}"
+            variants.append((variant_name, variant_desc, cat, sub, new_brand, int(new_price), new_stock))
+    return variants
+
+
+def generate_scaled_products():
+    """Generate 10,000+ products by combining base + variants + generated."""
+    all_products = []
+
+    # Electronics: ~150 base → scale to ~3000
+    all_products.extend(generate_variant_products(ELECTRONICS_PRODUCTS, 20))
+
+    # Grocery: ~30 base → scale to ~2000
+    all_products.extend(generate_variant_products(GROCERY_PRODUCTS, 65))
+
+    # Supermarket: ~15 base → scale to ~1500
+    all_products.extend(generate_variant_products(SUPERMARKET_PRODUCTS, 100))
+
+    # Clothing: ~30 base → scale to ~2000
+    all_products.extend(generate_variant_products(CLOTHING_PRODUCTS, 65))
+
+    # Footwear: ~20 base → scale to ~1500
+    all_products.extend(generate_variant_products(FOOTWEAR_PRODUCTS, 75))
+
+    # Accessories: ~15 base → scale to ~1000
+    all_products.extend(generate_variant_products(ACCESSORIES_PRODUCTS, 65))
+
+    # Add generated commodity products
+    categories_data = [
+        ("Electronics", "USB Drives", ["SanDisk", "Kingston", "Samsung", "HP", "Transcend"], (299, 5999), 50, 200),
+        ("Electronics", "Cables", ["Belkin", "Ugreen", "Anker", "Amazon Basics", "Portronics"], (199, 2999), 40, 150),
+        ("Electronics", "Chargers", ["Boat", "Realme", "OnePlus", "Samsung", "Mi"], (399, 4999), 35, 180),
+        ("Electronics", "Cases", ["Spigen", "OtterBox", "Boat", "PufferShield", "KAPAVER"], (299, 2999), 30, 200),
+        ("Electronics", "Screen Guards", ["Belkin", "Gadget Shieldz", "TemperedPro", "ClearView", "ShieldMAX"], (99, 999), 25, 300),
+        ("Electronics", "Adapters", ["Apple", "Samsung", "OnePlus", "Realme", "Belkin"], (299, 3999), 30, 150),
+        ("Electronics", "Hubs", ["HP", "Anker", "UGREEN", "Portronics", "Logitech"], (999, 9999), 20, 100),
+        ("Electronics", "Cooling Pads", ["Cooler Master", "Thermaltake", "Havit", "Targus", "Zebronics"], (499, 3999), 15, 120),
+        ("Electronics", "Laptop Stands", ["Strive", "Cosmic Byte", "Portronics", "Amazon Basics", "HeavyDuty"], (499, 4999), 20, 80),
+        ("Electronics", "Tablet Covers", ["Apple", "Samsung", "Spigen", "KapaVer", "Generic"], (299, 3999), 25, 100),
+        ("Electronics", "Car Chargers", ["Boat", "Anker", "Ambrane", "Syska", "Portronics"], (399, 2999), 30, 150),
+        ("Electronics", "LED Lights", ["Philips", "Syska", "Wipro", "Havells", "Orient"], (199, 2999), 25, 200),
+        ("Electronics", "Extension Boards", ["Havells", "Anchor", "Bajaj", "GM", "Orient"], (299, 2999), 20, 120),
+        ("Electronics", "Stabilizers", ["V-Guard", "Microtek", "Havells", "Bajaj", "Syska"], (999, 9999), 15, 80),
+        ("Electronics", "Inverters", ["Luminous", "Exide", "Amaron", "Havells", "V-Guard"], (3999, 29999), 10, 50),
+        ("Fashion", "Backpacks", ["Wildcraft", "American Tourister", "Skybags", "Safari", "Tommy"], (999, 9999), 20, 150),
+        ("Fashion", "Handbags", ["Lavie", "Hidesign", "Baggit", "Caprese", "Fossil"], (999, 14999), 15, 80),
+        ("Fashion", "Belts", ["WildHorn", "Allen Solly", "Tommy Hilfiger", "Pepe Jeans", "Lee"], (399, 2999), 25, 120),
+        ("Fashion", "Caps", ["Nike", "Adidas", "Puma", "New Era", "FILA"], (299, 2999), 30, 200),
+        ("Fashion", "Scarves", ["Allen Solly", "Peter England", "Van Heusen", "W", "Max"], (299, 1999), 20, 100),
+        ("Fashion", "Ties", ["Van Heusen", "Raymond", "Park Avenue", "Allen Solly", "Louis Philippe"], (299, 2999), 15, 80),
+        ("Fashion", "Socks", ["Puma", "Nike", "Adidas", "Jockey", "JUNIJIN"], (99, 999), 30, 300),
+        ("Fashion", "Gloves", ["Puma", "Under Armour", "Holloway", "Mechanix", "Decathlon"], (199, 2999), 20, 80),
+        ("Fashion", "Beanies", ["North Face", "Puma", "H&M", "Decathlon", "Tommy"], (299, 1999), 15, 100),
+        ("Fashion", "Bow Ties", ["Van Heusen", "Allen Solly", "Raymond", "Park Avenue", "Generic"], (199, 1999), 10, 60),
+        ("Grocery", "Instant Noodles", ["Maggi", "Yippee", "Top Ramen", "Knorr", "Pattal"], (14, 99), 50, 500),
+        ("Grocery", "Biscuits", ["Parle", "Britannia", "Oreo", "Cadbury", "Good Day"], (10, 199), 60, 800),
+        ("Grocery", "Chocolates", ["Cadbury", "Nestle", "Amul", "Ferrero", "Mars"], (20, 599), 40, 400),
+        ("Grocery", "Chips", ["Lays", "Kurkure", "Pringles", "Haldirams", "Bingo"], (10, 199), 50, 600),
+        ("Grocery", "Soft Drinks", ["Coca Cola", "Pepsi", "Sprite", "Fanta", "Thums Up"], (10, 40), 60, 500),
+        ("Grocery", "Water Bottles", ["Bisleri", "Kinley", "Aquafina", "Himalayan", "Oxyrich"], (10, 50), 80, 1000),
+        ("Grocery", "Milk Products", ["Amul", "Mother Dairy", "Nestle", "Amul", "Britannia"], (20, 299), 40, 300),
+        ("Grocery", "Breakfast Cereals", ["Kellogg's", "Quaker", "Muesli", "Nature Valley", "Grab", "True Elements"], (99, 599), 30, 200),
+        ("Grocery", "Health Drinks", ["Horlicks", "Bournvita", "Complan", "Boost", "Pediasure"], (149, 599), 25, 150),
+        ("Grocery", "Dry Fruits", ["Happilo", "Nutraj", "True Elements", "Solimo", "Tattva"], (99, 999), 35, 200),
+        ("Grocery", "Honey", ["Dabur", "Patanjali", "Saffola", "Nature Nate's", "Hitkari"], (99, 499), 30, 180),
+        ("Grocery", "Pickles", ["Kissan", "Mother's Recipe", "Chatpat", "Dabur", "Patanjali"], (59, 249), 35, 250),
+        ("Supermarket", "Shampoos", ["Head & Shoulders", "Pantene", "Dove", "TRESemme", "L'Oreal"], (99, 599), 40, 300),
+        ("Supermarket", "Soaps", ["Dettol", "Lux", "Dove", "Pears", "Cinthol"], (20, 199), 50, 400),
+        ("Supermarket", "Toothpaste", ["Colgate", "Pepsodent", "Sensodyne", "CloseUp", "Patanjali"], (30, 299), 45, 350),
+        ("Supermarket", "Face Wash", ["Himalaya", "Neutrogena", "Garnier", "Cetaphil", "Clean & Clear"], (99, 599), 30, 200),
+        ("Supermarket", "Body Lotion", ["Nivea", "Vaseline", "Ponds", "Dove", "Johnson's"], (99, 499), 25, 180),
+        ("Supermarket", "Hand Wash", ["Dettol", "Lifebuoy", "Himalaya", "Dove", "Savlon"], (49, 299), 40, 250),
+        ("Supermarket", "Tissues", ["Kleenex", "Tempo", "Origins", "Fine", "Paseo"], (59, 299), 30, 200),
+        ("Supermarket", "Garbage Bags", ["OxyClean", "Glad", "Freshwrapp", "Amazon Basics", "Pureit"], (99, 499), 25, 150),
+    ]
+
+    for cat, sub, brands, price_range, min_stock, max_stock in categories_data:
+        for brand in brands:
+            for i in range(50):
+                name = f"{brand} {sub} Premium {i+1}"
+                desc = f"High quality {sub.lower()} from {brand}"
+                price = round(random.uniform(price_range[0], price_range[1]), 0)
+                stock = random.randint(min_stock, max_stock)
+                all_products.append((name, desc, cat, sub, brand, int(price), stock))
+
+    return all_products
+
+
+ALL_PRODUCTS = generate_scaled_products()
 
 # ──────────────────────────────────────────────────────────
-# 20 FITNESS products
+# Seed function
 # ──────────────────────────────────────────────────────────
-FITNESS = [
-    ("Boldfit Yoga Mat 6mm", "Boldfit 6mm Anti-Skid Yoga Mat", "Fitness", "Yoga Mats", "Boldfit", 699, 60),
-    ("AmazonBasics Yoga Mat 8mm", "AmazonBasics 8mm Yoga Mat", "Fitness", "Yoga Mats", "AmazonBasics", 899, 45),
-    ("Kobo Exercise Yoga Mat 10mm", "Kobo 10mm Premium Yoga Mat", "Fitness", "Yoga Mats", "Kobo", 1299, 35),
-    ("Boldfit Resistance Band Set", "Boldfit Resistance Bands 5 Levels", "Fitness", "Resistance Bands", "Boldfit", 499, 70),
-    ("Fitbox Resistance Loop Bands", "Fitbox Loop Bands Set of 5", "Fitness", "Resistance Bands", "Fitbox", 349, 80),
-    ("Decathlon Dumbbells 2kg Pair", "Decathlon Neoprene Dumbbells 2kg", "Fitness", "Fitness Accessories", "Decathlon", 599, 50),
-    ("Boldfit Kettlebell 6kg", "Boldfit Vinyl Coated Kettlebell 6kg", "Fitness", "Fitness Accessories", "Boldfit", 899, 40),
-    ("Decathlon skipping Rope", "Decathlon Skipping Rope Adjustable", "Fitness", "Sports Accessories", "Decathlon", 199, 80),
-    ("Nivia Football Size 5", "Nivia Storm Football Size 5", "Fitness", "Sports Accessories", "Nivia", 599, 50),
-    ("Nivia Basketball Size 7", "Nivia Meteor Basketball Size 7", "Fitness", "Sports Accessories", "Nivia", 699, 45),
-    ("Cosco Cricket Bat", "Cosco Kashmir Willow Cricket Bat", "Fitness", "Sports Accessories", "Cosco", 899, 30),
-    ("SG Shield Cricket Bat", "SG Shield Plus Kashmir Willow", "Fitness", "Sports Accessories", "SG", 1499, 25),
-    ("Yonex Mavis 350 Shuttlecock", "Yonex Mavis 350 Nylon Shuttle 6pc", "Fitness", "Sports Accessories", "Yonex", 649, 50),
-    ("Nivia Tennis Ball 4 Pack", "Nivia Premier Tennis Ball Pack of 4", "Fitness", "Sports Accessories", "Nivia", 299, 60),
-    ("Decathlon Gym Gloves", "Decathlon Weight Training Gloves", "Fitness", "Fitness Accessories", "Decathlon", 399, 40),
-    ("Boldfit Ab Roller", "Boldfit Ab Roller Wheel Exercise", "Fitness", "Fitness Accessories", "Boldfit", 499, 35),
-    ("Lifelong Foam Roller", "Lifelong LLHM114 Foam Roller 45cm", "Fitness", "Fitness Accessories", "Lifelong", 599, 30),
-    ("AmazonBasics Water Bottle 1L", "AmazonBasics Tritan Water Bottle 1L", "Fitness", "Water Bottles", "AmazonBasics", 499, 50),
-    ("Milton Thermosteel Sports Bottle", "Milton 750ml Sports Bottle Steel", "Fitness", "Water Bottles", "Milton", 449, 55),
-    ("Nivia Sports Bag 40L", "Nivia Storm Duffle Bag 40L", "Fitness", "Sports Accessories", "Nivia", 799, 35),
-]
-
-# ──────────────────────────────────────────────────────────
-# 20 OFFICE & SCHOOL products
-# ──────────────────────────────────────────────────────────
-OFFICE_SCHOOL = [
-    ("Classmate Notebook 240pg", "Classmate Pulse Notebook A4 240 pages", "Office & School", "Notebooks", "Classmate", 89, 200),
-    ("Classmate Pulse 172pg", "Classmate Pulse Notebook 172 pages", "Office & School", "Notebooks", "Classmate", 65, 250),
-    ("Navneet Top Score Notebook", "Navneet Top Score A4 300 pages", "Office & School", "Notebooks", "Navneet", 129, 150),
-    ("Reynolds Blue Pen 10pc", "Reynolds Trimax Fine Carbold Blue 10", "Office & School", "Pens", "Reynolds", 120, 200),
-    ("Cello Butterflow Pen 10pc", "Cello Butterflow Ball Pen Blue 10pk", "Office & School", "Pens", "Cello", 100, 180),
-    ("Flair Writo-meter Pen 5pc", "Flair Writo-meter Blue Pen 5pk", "Office & School", "Pens", "Flair", 80, 200),
-    ("Nataraj Pencil Box 12pc", "Nataraj Drawing Pencils 12pk", "Office & School", "Pencils", "Nataraj", 99, 160),
-    ("Doms Zoom Pencil 10pc", "Doms Zoom Triangle Pencils 10pk", "Office & School", "Pencils", "Doms", 55, 200),
-    ("Apsara Platinum Pencil 10pc", "Apsara Platinum Extra Dark 10pk", "Office & School", "Pencils", "Apsara", 49, 220),
-    ("Faber Castell Colour 12pc", "Faber Castell Classic Colour Pencils 12", "Office & School", "Stationery", "Faber Castell", 99, 150),
-    ("Camlin Kokuyo Compass Box", "Camlin Kokuyo Compass Box Essential", "Office & School", "Stationery", "Camlin", 149, 120),
-    ("Kores Glue Stick 15g", "Kores Glu Stik Washable 15g 10pk", "Office & School", "Stationery", "Kores", 199, 100),
-    ("Casio FX-991EX Calculator", "Casio FX-991EX Scientific Calculator", "Office & School", "Calculators", "Casio", 1199, 80),
-    ("Casio MJ-12D Calculator", "Casio MJ-12D Desktop Calculator", "Office & School", "Calculators", "Casio", 549, 100),
-    ("HP 15s Laptop Backpack", "HP Bumper 15.6 inch School Backpack", "Office & School", "Backpacks", "HP", 1799, 30),
-    ("Wildcraft School Backpack", "Wildcraft 28L School Backpack", "Office & School", "Backpacks", "Wildcraft", 1999, 25),
-    ("Skybags Luminos Backpack", "Skybags 32L College Backpack", "Office & School", "Backpacks", "Skybags", 1699, 30),
-    ("Classmate Octane Gel Pen 10pc", "Classmate Octane Gel Pen 0.5mm 10pk", "Office & School", "Pens", "Classmate", 130, 180),
-    ("Staedtler Norris Pencil 12pc", "Staedtler Norris Eco Pencils 12pk", "Office & School", "Pencils", "Staedtler", 149, 120),
-    ("Maped Folder Set 6pc", "Maped.file Folder Set A4 6 colors", "Office & School", "Stationery", "Maped", 199, 100),
-]
-
-# ──────────────────────────────────────────────────────────
-# Combine all products
-# ──────────────────────────────────────────────────────────
-ALL_PRODUCTS = (
-    ELECTRONICS + GROCERY + SUPERMARKET + CLOTHING +
-    FOOTWEAR + ACCESSORIES + HOME_KITCHEN + PERSONAL_CARE +
-    FITNESS + OFFICE_SCHOOL
-)
-
 
 async def seed():
-    """Seed the database with products."""
     from models.database import async_session
-    from models.models import Product, Policy, Merchant, ProductRelationship
-    from sqlalchemy import select
+    from models.models import Merchant, Product, ProductRelationship, Policy, AuditLog, Notification
+    from sqlalchemy import select, text
 
     async with async_session() as db:
-        # Check if products exist
-        result = await db.execute(select(Product).limit(1))
-        if result.scalar_one_or_none():
-            logger.info("Database already seeded, skipping.")
+        # Check if already seeded
+        result = await db.execute(text("SELECT COUNT(*) FROM products"))
+        count = result.scalar()
+        if count and count >= 100:
+            logger.info(f"Database already has {count} products, skipping seed")
             return
 
+        logger.info(f"Seeding {len(ALL_PRODUCTS)} products...")
+
         # Create merchant
-        merchant = Merchant(name="TechZone Electronics", email="admin@techzone.in")
+        merchant = Merchant(
+            name="TechZone Electronics",
+            email="admin@techzone.com",
+        )
         db.add(merchant)
         await db.commit()
         await db.refresh(merchant)
@@ -644,31 +521,50 @@ async def seed():
         product_ids = []
         categories_seen = set()
 
-        for name, desc, category, subcategory, brand, price, stock in ALL_PRODUCTS:
-            pid = _id()
-            product = Product(
-                id=pid,
-                merchant_id=merchant.id,
-                name=name,
-                description=desc,
-                category=category,
-                subcategory=subcategory,
-                brand=brand,
-                price=price,
-                currency="INR",
-                stock=stock,
-                sku=f"SKU-{pid[:8].upper()}",
-                rating=round(3.5 + (hash(name) % 16) / 10.0, 1),
-                tags=f"{category.lower()},{subcategory.lower()},{brand.lower()}",
-            )
-            db.add(product)
-            product_ids.append(pid)
-            categories_seen.add(category)
+        batch_size = 500
+        for i in range(0, len(ALL_PRODUCTS), batch_size):
+            batch = ALL_PRODUCTS[i:i+batch_size]
+            for name, desc, category, subcategory, brand, price, stock in batch:
+                pid = _id()
+                h = _hash_seed(name)
+                sales = h % 200
+                cost_ratio = 0.45 + (h % 30) / 100  # 45-75% of retail
+                cost_price = round(price * cost_ratio, 2)
+                revenue = round(sales * price, 2)
+                margin = round(((price - cost_price) / price) * 100, 2) if price > 0 else 0
+                rating = round(3.0 + (h % 20) / 10.0, 1)
 
-        # Create product relationships (cross-sell and upsell)
+                product = Product(
+                    id=pid,
+                    merchant_id=merchant.id,
+                    name=name,
+                    description=desc,
+                    category=category,
+                    subcategory=subcategory,
+                    brand=brand,
+                    price=price,
+                    previous_price=round(price * random.uniform(0.9, 1.1), 2),
+                    cost_price=cost_price,
+                    currency="INR",
+                    stock=stock,
+                    sales=sales,
+                    revenue=revenue,
+                    margin=margin,
+                    sku=f"SKU-{pid[:8].upper()}",
+                    rating=min(rating, 5.0),
+                    tags=f"{category.lower()},{subcategory.lower()},{brand.lower()}",
+                    image_url=f"https://placehold.co/400x300/1e1b4b/ffffff?text={brand[:8]}+{subcategory[:8]}",
+                )
+                db.add(product)
+                product_ids.append(pid)
+                categories_seen.add(category)
+
+            await db.commit()
+            logger.info(f"  Seeded batch {i//batch_size + 1} ({min(i+batch_size, len(ALL_PRODUCTS))}/{len(ALL_PRODUCTS)})")
+
+        # Create product relationships
         rels = []
-        # Electronics cross-sells
-        for i in range(0, min(30, len(product_ids)), 3):
+        for i in range(0, min(100, len(product_ids)), 3):
             if i + 1 < len(product_ids):
                 rels.append((product_ids[i], product_ids[i+1], "cross-sell", "Frequently bought together"))
             if i + 2 < len(product_ids):
@@ -676,16 +572,27 @@ async def seed():
 
         for pid, rpid, rtype, reason in rels:
             rel = ProductRelationship(
-                product_id=pid,
-                related_product_id=rpid,
-                relationship_type=rtype,
-                reason=reason
+                product_id=pid, related_product_id=rpid,
+                relationship_type=rtype, reason=reason,
             )
             db.add(rel)
 
-        # Create default policy (higher limit for demo)
-        policy = Policy(max_transaction_amount=50000, payment_requires_approval=True)
+        # Default policy
+        policy = Policy(max_transaction_amount=500000, payment_requires_approval=False)
         db.add(policy)
 
+        # Sample notifications
+        sample_notifs = [
+            ("Welcome to MerchantFlow AI", "Your AI-powered commerce platform is ready.", "info"),
+            ("Low Stock Alert", "Some products are running low on stock. Check inventory.", "warning"),
+            ("System Ready", "All systems operational. AI pricing engine active.", "success"),
+        ]
+        for title, msg, ntype in sample_notifs:
+            db.add(Notification(title=title, message=msg, type=ntype))
+
         await db.commit()
-        logger.info(f"Seeded {len(ALL_PRODUCTS)} products across {len(categories_seen)} categories, {len(rels)} relationships")
+        logger.info(f"Seed completed: {len(ALL_PRODUCTS)} products across {len(categories_seen)} categories, {len(rels)} relationships")
+
+
+if __name__ == "__main__":
+    asyncio.run(seed())

@@ -27,16 +27,22 @@ class Product(Base):
     description = Column(Text)
     category = Column(String, nullable=False)
     price = Column(Float, nullable=False)
+    previous_price = Column(Float)
+    cost_price = Column(Float)
     currency = Column(String, default="INR")
     subcategory = Column(String)
     brand = Column(String)
     sku = Column(String, unique=True)
     rating = Column(Float, default=0.0)
-    tags = Column(Text)  # comma-separated tags
+    tags = Column(Text)
     stock = Column(Integer, default=0)
+    sales = Column(Integer, default=0)
+    revenue = Column(Float, default=0.0)
+    margin = Column(Float, default=0.0)
     image_url = Column(String)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
     merchant = relationship("Merchant", back_populates="products")
     relationships = relationship("ProductRelationship", foreign_keys="ProductRelationship.product_id", back_populates="product")
 
@@ -45,7 +51,7 @@ class ProductRelationship(Base):
     id = Column(String, primary_key=True, default=gen_uuid)
     product_id = Column(String, ForeignKey("products.id"))
     related_product_id = Column(String, ForeignKey("products.id"))
-    relationship_type = Column(String)  # upsell, cross-sell, complementary
+    relationship_type = Column(String)
     reason = Column(Text)
     product = relationship("Product", foreign_keys=[product_id], back_populates="relationships")
     related_product = relationship("Product", foreign_keys=[related_product_id])
@@ -85,14 +91,37 @@ class Order(Base):
     cart_id = Column(String, ForeignKey("carts.id"))
     customer_id = Column(String, ForeignKey("customers.id"))
     merchant_id = Column(String, ForeignKey("merchants.id"))
+    customer_name = Column(String)
+    customer_email = Column(String)
+    customer_phone = Column(String)
+    customer_address = Column(Text)
+    subtotal = Column(Float, default=0)
+    discount = Column(Float, default=0)
+    tax = Column(Float, default=0)
+    shipping = Column(Float, default=0)
     total = Column(Float, nullable=False)
-    status = Column(String, default="created")  # created, approval_pending, approved, payment_initiated, success, failed
+    status = Column(String, default="pending")
+    payment_status = Column(String, default="pending")
     razorpay_order_id = Column(String)
     razorpay_payment_id = Column(String)
+    notes = Column(Text)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
     cart = relationship("Cart")
     payment = relationship("Payment", back_populates="order", uselist=False)
+    items = relationship("OrderItem", back_populates="order")
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    order_id = Column(String, ForeignKey("orders.id"))
+    product_id = Column(String, ForeignKey("products.id"))
+    product_name = Column(String)
+    quantity = Column(Integer, default=1)
+    price = Column(Float)
+    subtotal = Column(Float)
+    order = relationship("Order", back_populates="items")
+    product = relationship("Product")
 
 class Payment(Base):
     __tablename__ = "payments"
@@ -113,9 +142,9 @@ class Policy(Base):
     __tablename__ = "policies"
     id = Column(String, primary_key=True, default=gen_uuid)
     merchant_id = Column(String, ForeignKey("merchants.id"))
-    max_transaction_amount = Column(Float, default=3000)
+    max_transaction_amount = Column(Float, default=500000)
     max_discount_percentage = Column(Float, default=10)
-    payment_requires_approval = Column(Boolean, default=True)
+    payment_requires_approval = Column(Boolean, default=False)
     max_retry_attempts = Column(Integer, default=1)
     created_at = Column(DateTime, default=utcnow)
     merchant = relationship("Merchant", back_populates="policies")
@@ -125,7 +154,7 @@ class Approval(Base):
     id = Column(String, primary_key=True, default=gen_uuid)
     order_id = Column(String, ForeignKey("orders.id"))
     session_id = Column(String)
-    status = Column(String, default="pending")  # pending, approved, rejected
+    status = Column(String, default="pending")
     approved_by = Column(String)
     token = Column(String)
     created_at = Column(DateTime, default=utcnow)
@@ -137,6 +166,7 @@ class AuditLog(Base):
     session_id = Column(String)
     user = Column(String)
     action = Column(String, nullable=False)
+    description = Column(Text)
     tool_called = Column(String)
     input_data = Column(Text)
     decision = Column(String)
@@ -144,6 +174,9 @@ class AuditLog(Base):
     approval_status = Column(String)
     payment_reference = Column(String)
     final_status = Column(String)
+    event_type = Column(String, default="system")
+    related_entity = Column(String)
+    financial_impact = Column(Float)
     created_at = Column(DateTime, default=utcnow)
 
 class AgentSession(Base):
@@ -154,3 +187,13 @@ class AgentSession(Base):
     messages = Column(Text, default="[]")
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    title = Column(String, nullable=False)
+    message = Column(Text)
+    type = Column(String, default="info")
+    is_read = Column(Boolean, default=False)
+    related_entity = Column(String)
+    created_at = Column(DateTime, default=utcnow)

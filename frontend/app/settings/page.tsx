@@ -3,186 +3,154 @@
 import { useEffect, useState } from 'react'
 
 interface Policy {
-  id: string
-  max_transaction_amount: number
-  max_discount_percentage: number
-  payment_requires_approval: boolean
-  max_retry_attempts: number
+  id: string; max_transaction_amount: number; max_discount_percentage: number;
+  payment_requires_approval: boolean; max_retry_attempts: number;
+}
+
+interface HealthStatus {
+  status: string; service: string; ai: string; razorpay: string; database: string;
 }
 
 export default function SettingsPage() {
   const [policy, setPolicy] = useState<Policy | null>(null)
+  const [health, setHealth] = useState<HealthStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
-    fetchPolicy()
+    Promise.all([
+      fetch('/api/policies/').then(r => r.json()),
+      fetch('/health').then(r => r.json()),
+    ]).then(([p, h]) => { setPolicy(p); setHealth(h) })
+    .catch(() => {})
+    .finally(() => setLoading(false))
   }, [])
-
-  const fetchPolicy = async () => {
-    try {
-      const res = await fetch('/api/policies/')
-      const data = await res.json()
-      setPolicy(data)
-    } catch (error) {
-      console.error('Failed to fetch policy')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleSave = async () => {
     if (!policy) return
     setSaving(true)
     try {
       const res = await fetch('/api/policies/', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(policy)
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(policy),
       })
       if (res.ok) {
-        setMessage('Policy updated successfully!')
+        setMessage('Settings saved successfully!')
         setTimeout(() => setMessage(''), 3000)
       }
-    } catch (error) {
-      setMessage('Failed to update policy')
-    } finally {
-      setSaving(false)
-    }
+    } catch (e) { setMessage('Failed to save') }
+    finally { setSaving(false) }
   }
 
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
-        </div>
+  if (loading) return (
+    <div className="p-6 lg:p-8">
+      <div className="animate-pulse space-y-4">
+        <div className="h-8 bg-dark-700 rounded w-1/4"></div>
+        <div className="h-64 bg-dark-800 rounded-lg"></div>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Agent Policies</h1>
-        <p className="text-gray-600 mt-1">Configure spending limits and approval requirements</p>
+    <div className="p-6 lg:p-8 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
+
+      {/* System Status */}
+      <div className="card p-5 mb-6">
+        <h2 className="text-sm font-semibold text-white mb-4">System Status</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatusBox label="API" value={health?.status || 'Unknown'} ok={health?.status === 'healthy'} />
+          <StatusBox label="AI Provider" value={health?.ai || 'gemini'} ok />
+          <StatusBox label="Razorpay" value={health?.razorpay || 'demo_mode'} ok={health?.razorpay !== 'not_configured'} />
+          <StatusBox label="Database" value={health?.database || 'sqlite'} ok />
+        </div>
       </div>
 
-      <div className="max-w-2xl">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-6">Spending Policies</h2>
-
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Maximum Transaction Amount (₹)
-              </label>
-              <input
-                type="number"
-                value={policy?.max_transaction_amount || 3000}
-                onChange={(e) => setPolicy(prev => prev ? {
-                  ...prev,
-                  max_transaction_amount: parseFloat(e.target.value)
-                } : null)}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Transactions above this amount will be blocked by the policy engine
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Maximum Discount Percentage
-              </label>
-              <input
-                type="number"
-                value={policy?.max_discount_percentage || 10}
-                onChange={(e) => setPolicy(prev => prev ? {
-                  ...prev,
-                  max_discount_percentage: parseFloat(e.target.value)
-                } : null)}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Maximum discount the agent can apply
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Maximum Retry Attempts
-              </label>
-              <input
-                type="number"
-                value={policy?.max_retry_attempts || 1}
-                onChange={(e) => setPolicy(prev => prev ? {
-                  ...prev,
-                  max_retry_attempts: parseInt(e.target.value)
-                } : null)}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                How many times the agent can retry a failed payment
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div>
-                <p className="font-medium text-gray-900">Payment Requires Approval</p>
-                <p className="text-sm text-gray-600">
-                  Require explicit user approval before processing payments
-                </p>
-              </div>
-              <button
-                onClick={() => setPolicy(prev => prev ? {
-                  ...prev,
-                  payment_requires_approval: !prev.payment_requires_approval
-                } : null)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  policy?.payment_requires_approval ? 'bg-primary-600' : 'bg-gray-300'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  policy?.payment_requires_approval ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </div>
+      {/* Merchant Profile */}
+      <div className="card p-5 mb-6">
+        <h2 className="text-sm font-semibold text-white mb-4">Merchant Profile</h2>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-dark-400 mb-1 block">Store Name</label>
+            <input type="text" defaultValue="TechZone Electronics" className="input" disabled />
           </div>
+          <div>
+            <label className="text-xs text-dark-400 mb-1 block">Email</label>
+            <input type="email" defaultValue="admin@techzone.com" className="input" disabled />
+          </div>
+          <div>
+            <label className="text-xs text-dark-400 mb-1 block">Currency</label>
+            <input type="text" defaultValue="INR (₹)" className="input" disabled />
+          </div>
+        </div>
+      </div>
 
-          {message && (
-            <div className={`mt-4 p-3 rounded ${
-              message.includes('success') ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-            }`}>
-              {message}
+      {/* Agent Policies */}
+      <div className="card p-5 mb-6">
+        <h2 className="text-sm font-semibold text-white mb-4">Agent Policies</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-dark-400 mb-1 block">Max Transaction Amount (₹)</label>
+            <input type="number" value={policy?.max_transaction_amount || 500000}
+              onChange={e => setPolicy(p => p ? { ...p, max_transaction_amount: parseFloat(e.target.value) } : null)}
+              className="input" />
+            <p className="text-[10px] text-dark-500 mt-1">Transactions above this are blocked</p>
+          </div>
+          <div>
+            <label className="text-xs text-dark-400 mb-1 block">Max Discount %</label>
+            <input type="number" value={policy?.max_discount_percentage || 10}
+              onChange={e => setPolicy(p => p ? { ...p, max_discount_percentage: parseFloat(e.target.value) } : null)}
+              className="input" />
+          </div>
+          <div className="flex items-center justify-between p-3 bg-dark-700/50 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-white">Payment Requires Approval</p>
+              <p className="text-xs text-dark-400">Require explicit approval before payments</p>
             </div>
-          )}
-
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
+            <button onClick={() => setPolicy(p => p ? { ...p, payment_requires_approval: !p.payment_requires_approval } : null)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                policy?.payment_requires_approval ? 'bg-primary-600' : 'bg-dark-600'
+              }`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                policy?.payment_requires_approval ? 'translate-x-6' : 'translate-x-1'
+              }`} />
             </button>
           </div>
         </div>
 
-        <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-yellow-600 text-xl">⚠️</span>
-            <div>
-              <h3 className="font-medium text-yellow-800">Safety Notice</h3>
-              <p className="text-sm text-yellow-700 mt-1">
-                The AI agent cannot override these policies. All financial operations are
-                bounded by these limits and require explicit approval when enabled.
-              </p>
-            </div>
+        {message && (
+          <div className={`mt-4 p-3 rounded text-sm ${message.includes('success') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+            {message}
+          </div>
+        )}
+
+        <div className="mt-4 flex justify-end">
+          <button onClick={handleSave} disabled={saving} className="btn-primary">{saving ? 'Saving...' : 'Save Changes'}</button>
+        </div>
+      </div>
+
+      {/* Safety Notice */}
+      <div className="card p-4 border-amber-500/20 bg-amber-500/5">
+        <div className="flex items-start gap-3">
+          <span className="text-amber-400 text-lg">⚠️</span>
+          <div>
+            <h3 className="font-medium text-amber-300 text-sm">Safety Notice</h3>
+            <p className="text-xs text-dark-300 mt-1">The AI agent cannot override these policies. All financial operations are bounded by these limits.</p>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function StatusBox({ label, value, ok }: { label: string; value: string; ok: boolean }) {
+  return (
+    <div className="bg-dark-700/50 rounded-lg p-3 border border-dark-600">
+      <p className="text-[10px] text-dark-400 mb-1">{label}</p>
+      <div className="flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${ok ? 'bg-emerald-400' : 'bg-amber-400'}`}></div>
+        <span className="text-sm text-white font-medium">{value}</span>
       </div>
     </div>
   )

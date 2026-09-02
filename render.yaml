@@ -3,7 +3,7 @@ services:
     name: ai-growth-and-commerce-agent
     env: python
     rootDir: .
-    buildCommand: cd backend && pip install -r requirements.txt
+    buildCommand: cd backend && find . -name __pycache__ -exec rm -rf {} + 2>/dev/null; pip install -r requirements.txt
     startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true

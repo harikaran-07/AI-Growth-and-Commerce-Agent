@@ -79,6 +79,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     # Execute ALL tool calls directly and extract results
     # Always execute — don't trust prior execution state
+    logger.info(f"[CHAT] Processing {len(tool_calls)} tool calls for session {session_id}")
     for tc in tool_calls:
         tool_name = tc.get("name", "")
         tool_args = tc.get("arguments", {})
@@ -87,9 +88,12 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 result_str = await execute_tool(tool_name, tool_args, db, session_id)
                 result_data = json.loads(result_str)
                 tc["result"] = result_data
+                logger.info(f"[CHAT] Tool {tool_name} executed, result keys: {list(result_data.keys()) if isinstance(result_data, dict) else type(result_data)}")
             except Exception as e:
-                logger.error(f"Tool execution failed ({tool_name}): {e}")
+                logger.error(f"[CHAT] Tool execution failed ({tool_name}): {e}")
                 tc["result"] = {"error": str(e)}
+        else:
+            logger.warning(f"[CHAT] Skipping tool call with no name: {tc}")
 
     # Format tool calls for the frontend response
     for tc in tool_calls:
@@ -102,16 +106,19 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     for tc in tool_calls:
         result = tc.get("result", {})
         if not result or "error" in result:
+            logger.info(f"[CHAT] Skipping tool result: error={result.get('error') if isinstance(result, dict) else 'empty'}")
             continue
         tc_name = tc.get("name", "")
         if tc_name == "search_products" and "products" in result:
             products_found = result["products"]
+            logger.info(f"[CHAT] Extracted {len(products_found)} products from search")
         elif tc_name == "get_cart" and "cart" in result:
             cart_info = result["cart"]
         elif tc_name == "recommend_cross_sell" and "recommendations" in result:
             recommendations = result["recommendations"]
         elif tc_name == "recommend_upsell" and "recommendations" in result:
             recommendations = result["recommendations"]
+    logger.info(f"[CHAT] Final: {len(products_found)} products, response_text empty={not response_text}")
 
 
 

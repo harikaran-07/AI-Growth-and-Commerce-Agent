@@ -77,6 +77,20 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     response_text = llm_response.get("content") or ""
     tool_calls = llm_response.get("tool_calls", []) or []
 
+    # Execute any pending tool calls directly
+    # (ensures tools run even if call_llm didn't execute them)
+    for tc in tool_calls:
+        tool_name = tc.get("name", "")
+        tool_args = tc.get("arguments", {})
+        if tool_name and not tc.get("result"):  # Only if not already executed
+            try:
+                result_str = await execute_tool(tool_name, tool_args, db, session_id)
+                result_data = json.loads(result_str)
+                tc["result"] = result_data
+            except Exception as e:
+                logger.error(f"Tool execution failed ({tool_name}): {e}")
+                tc["error"] = str(e)
+
     # Format tool calls for the frontend response
     for tc in tool_calls:
         all_tool_calls_used.append({

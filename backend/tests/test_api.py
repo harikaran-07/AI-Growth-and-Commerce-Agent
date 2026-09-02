@@ -79,7 +79,8 @@ async def test_health(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "healthy"
-    assert "ai" in data
+    assert "chatbot" in data
+    assert data["chatbot"]["type"] == "rule-based"
     assert "razorpay" in data
 
 

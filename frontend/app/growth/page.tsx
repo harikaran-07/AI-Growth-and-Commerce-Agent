@@ -96,7 +96,7 @@ export default function GrowthPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Growth & Investment</h1>
-          <p className="text-dark-400 mt-1 text-sm">AI-powered business growth analysis and investment recommendations</p>
+          <p className="text-dark-400 mt-1 text-sm">Business growth analysis and investment recommendations</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex bg-dark-700 rounded-lg p-0.5">
@@ -130,7 +130,7 @@ export default function GrowthPage() {
               </div>
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-bold text-white mb-1">AI Growth Score: {data.growth_score.score}/100</h3>
+              <h3 className="text-lg font-bold text-white mb-1">Growth Score: {data.growth_score.score}/100</h3>
               <p className="text-sm text-dark-300 mb-3">{data.growth_score.summary}</p>
               <div className="flex flex-wrap gap-2">
                 {data.growth_score.factors.map((f, i) => (
@@ -206,7 +206,7 @@ export default function GrowthPage() {
       {/* Investment Recommendations */}
       {data.investment_recommendations.length > 0 && (
         <div className="card p-5 mb-6">
-          <h3 className="text-sm font-semibold text-white mb-4">AI Investment Recommendations</h3>
+          <h3 className="text-sm font-semibold text-white mb-4">Investment Recommendations</h3>
           <div className="space-y-4">
             {data.investment_recommendations.map((rec, i) => (
               <div key={i} className="bg-dark-700/50 rounded-lg p-4 border border-dark-600">

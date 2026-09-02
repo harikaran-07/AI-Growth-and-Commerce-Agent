@@ -47,7 +47,7 @@ export default function Header() {
   const navLinks = [
     { href: '/', label: 'Home', icon: '🏠' },
     { href: '/products', label: 'Products', icon: '📦' },
-    { href: '/buyer', label: 'AI Assistant', icon: '🤖' },
+    { href: '/buyer', label: 'Commerce Assistant', icon: '🛒' },
     { href: '/orders', label: 'Orders', icon: '📋' },
   ]
 

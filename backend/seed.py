@@ -583,9 +583,9 @@ async def seed():
 
         # Sample notifications
         sample_notifs = [
-            ("Welcome to AI Growth and Commerce Agent", "Your AI-powered commerce platform is ready.", "info"),
+            ("Welcome to AI Growth and Commerce Agent", "Your commerce platform is ready.", "info"),
             ("Low Stock Alert", "Some products are running low on stock. Check inventory.", "warning"),
-            ("System Ready", "All systems operational. AI pricing engine active.", "success"),
+            ("System Ready", "All systems operational. Commerce assistant ready.", "success"),
         ]
         for title, msg, ntype in sample_notifs:
             db.add(Notification(title=title, message=msg, type=ntype))

@@ -21,7 +21,7 @@ const FEATURES = [
   {
     tag: "REVENUE INTELLIGENCE",
     title: "Predict revenue\nbefore it happens",
-    body: "Real-time pipeline analysis with causal AI models. Surface risks, accelerate deals, and optimize pricing based on behavioral signals across your entire customer base.",
+    body: "Real-time pipeline analysis with causal models. Surface risks, accelerate deals, and optimize pricing based on behavioral signals across your entire customer base.",
     stat: "3.4×",
     statLabel: "forecast accuracy lift",
     icon: (

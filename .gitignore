@@ -6,18 +6,37 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-.env.local
+
+# environment files
 .env
+.env.*
+!.env.example
 
 # build output
 .next/
 frontend/.next/
+frontend/out/
 dist/
+build/
+coverage/
 
 # OS/editor
 .DS_Store
 .vscode/
+.idea/
+*.log
 
 # backend database
 backend/merchantflow.db
 merchantflow.db
+
+# Python
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+*.swp
+*.swo
+*~

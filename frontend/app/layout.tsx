@@ -2,10 +2,11 @@ import type { Metadata } from 'next'
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
 import Header from '@/components/Header'
+import CommerceChat from '@/components/CommerceChat'
 
 export const metadata: Metadata = {
   title: 'AI Growth and Commerce Agent',
-  description: 'AI-powered commerce intelligence platform',
+  description: 'Commerce intelligence platform with rule-based chatbot and analytics',
 }
 
 // Pages that use the customer-facing header (not the merchant sidebar)
@@ -33,6 +34,7 @@ export default function RootLayout({
             </main>
           </div>
         </div>
+        <CommerceChat />
       </body>
     </html>
   )

@@ -765,7 +765,7 @@ async def _get_sales_recommendations(db: AsyncSession, session_id: str) -> str:
             "type": "insufficient_data",
             "icon": "📊",
             "title": "Need More Data",
-            "message": "Not enough sales data yet. Complete more orders to generate reliable AI recommendations.",
+            "message":            "Not enough sales data yet. Complete more orders to generate reliable recommendations.",
             "reason": "Recommendations require order data to analyze patterns.",
         })
 
@@ -773,7 +773,7 @@ async def _get_sales_recommendations(db: AsyncSession, session_id: str) -> str:
     recommendations = recommendations[:8]
 
     await log_audit_event(
-        db, session_id, "AI_RECOMMENDATIONS",
+        db, session_id,        "RECOMMENDATIONS",
         tool_called="get_sales_recommendations",
         decision=f"Generated {len(recommendations)} recommendations",
         final_status="success"

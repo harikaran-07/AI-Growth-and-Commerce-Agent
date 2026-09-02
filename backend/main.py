@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AI Growth and Commerce Agent",
-    description="AI Growth & Agentic Commerce Agent for Razorpay Buildathon",
+    description="Commerce Agent for Razorpay Buildathon",
     version="2.0.0",
     lifespan=lifespan
 )
@@ -109,11 +109,6 @@ app.include_router(synthetic.router, prefix="/api", tags=["Synthetic Data"])
 @app.get("/health")
 async def health():
     """Health check endpoint - returns 200 when healthy."""
-    key1 = os.getenv("GEMINI_API_KEY_1", os.getenv("GEMINI_API_KEY", ""))
-    key2 = os.getenv("GEMINI_API_KEY_2", "")
-    has_gemini = bool(key1 and key1 not in ("your_api_key_here", "placeholder_secret", ""))
-    has_gemini2 = bool(key2 and key2 not in ("your_api_key_here", "placeholder_secret", ""))
-    
     razorpay_key = os.getenv("RAZORPAY_KEY_ID", "")
     
     # Check database connectivity
@@ -134,12 +129,10 @@ async def health():
         "status": "healthy",
         "service": "AI Growth and Commerce Agent",
         "version": "2.0.0",
-        "ai": {
-            "provider": os.getenv("AI_PROVIDER", "gemini"),
-            "model": os.getenv("AI_MODEL", "gemini-2.0-flash"),
-            "key1_configured": has_gemini,
-            "key2_configured": has_gemini2,
-            "mode": "live" if has_gemini else "fallback",
+        "chatbot": {
+            "type": "rule-based",
+            "provider": "built-in",
+            "mode": "local",
         },
         "razorpay": "test_mode" if razorpay_key.startswith("rzp_test_") else ("configured" if razorpay_key else "demo_mode"),
         "database": {

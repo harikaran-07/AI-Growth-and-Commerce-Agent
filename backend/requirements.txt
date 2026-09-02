@@ -11,5 +11,4 @@ python-multipart>=0.0.6
 alembic>=1.13.0
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
-google-genai>=2.20.0
 razorpay>=1.4.0

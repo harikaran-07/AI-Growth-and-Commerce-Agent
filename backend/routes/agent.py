@@ -1,6 +1,7 @@
 """
-AI Agent Chat Endpoint
-Uses Gemini Chat API with automatic function calling for agentic commerce.
+Commerce Assistant Chat Endpoint
+Rule-based intent detection with deterministic product search and cart actions.
+No external AI API - uses built-in pattern matching and database queries.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -31,16 +32,15 @@ class ChatResponse(BaseModel):
     approval: Optional[dict] = None
     payment: Optional[dict] = None
     tool_calls: List[dict] = []
+    quick_actions: List[dict] = []
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
-    Main AI agent chat endpoint.
-    Uses Gemini SYNC Chat API with AFC (Automatic Function Calling).
-    The AFC handles the full tool loop internally - tools are executed
-    by the SDK, results are sent back to the model, and the final
-    text response is returned.
+    Main chat endpoint for the Commerce Assistant.
+    Uses rule-based intent detection and deterministic tool execution.
+    No external AI API is called.
     """
     session_id = request.session_id
     session_data = get_session_data(session_id)
@@ -65,10 +65,11 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     except Exception as e:
         logger.error(f"LLM call failed: {e}")
         return ChatResponse(
-            message="AI service is temporarily unavailable. You can still browse the merchant catalog.",
+            message="Chat service is temporarily unavailable. You can still browse the merchant catalog.",
             products=[],
             recommendations=[],
-            tool_calls=[]
+            tool_calls=[],
+            quick_actions=[{"label": "Find Products", "message": "Show me popular products"}, {"label": "Help", "message": "Help"}]
         )
 
     # AFC already executed tools and generated the final response.
@@ -119,6 +120,9 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     messages.append({"role": "assistant", "content": response_text})
     session_data["conversation_history"] = messages
 
+    # Extract quick_actions from response
+    quick_actions = llm_response.get("quick_actions", []) or []
+
     return ChatResponse(
         message=response_text,
         products=products_found,
@@ -126,7 +130,8 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         cart=cart_info,
         approval=approval_info,
         payment=None,
-        tool_calls=all_tool_calls_used
+        tool_calls=all_tool_calls_used,
+        quick_actions=quick_actions
     )
 
 

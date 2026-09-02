@@ -12,14 +12,6 @@ services:
         fromDatabase:
           name: ai-commerce-db
           property: connectionString
-      - key: AI_PROVIDER
-        value: gemini
-      - key: AI_MODEL
-        value: gemini-2.0-flash
-      - key: GEMINI_API_KEY_1
-        sync: false
-      - key: GEMINI_API_KEY_2
-        sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

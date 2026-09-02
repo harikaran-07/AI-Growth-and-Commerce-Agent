@@ -436,7 +436,7 @@ async def get_synthetic_dashboard():
     # Investment allocation
     investment_allocation = {
         "total_budget": 100000,
-        "label": "AI Suggested Allocation",
+        "label": "Suggested Allocation",
         "disclaimer": "Based on synthetic historical data — not actual investment advice",
         "allocations": [
             {"category": "Smartphone Inventory", "amount": 35000, "percentage": 35, "reason": "Highest revenue category"},

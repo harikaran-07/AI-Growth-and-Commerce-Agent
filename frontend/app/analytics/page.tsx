@@ -31,7 +31,7 @@ export default function AnalyticsPage() {
     <div className="p-6 lg:p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Growth Analytics</h1>
-        <p className="text-dark-400 text-sm mt-1">AI-powered revenue insights and performance metrics</p>
+        <p className="text-dark-400 text-sm mt-1">Revenue insights and performance metrics</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -77,7 +77,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* AI Agent Performance */}
         <div className="card p-5">
-          <h3 className="text-sm font-semibold text-white mb-4">AI Agent Performance</h3>
+          <h3 className="text-sm font-semibold text-white mb-4">System Performance</h3>
           <div className="space-y-3">
             <div className="p-3 bg-primary-500/5 border border-primary-500/10 rounded-lg">
               <div className="flex justify-between items-center">
@@ -103,7 +103,7 @@ export default function AnalyticsPage() {
               'Inventory validation before checkout',
               'Razorpay signature verification',
               'Audit trail for all actions',
-              'AI-powered pricing recommendations',
+              'Rule-based pricing recommendations',
               'Session-based cart persistence',
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 text-sm text-dark-200">

@@ -86,7 +86,7 @@ export default function BuyerPage() {
     } catch (e: any) {
       setMessages(prev => [...prev, {
         id: `e_${Date.now()}`, role: 'assistant',
-        content: `⚠️ Error: ${e.message || 'Unknown error'}. The AI service may be temporarily unavailable.`,
+        content: `⚠️ Error: ${e.message || 'Unknown error'}. The chat service may be temporarily unavailable.`,
       }])
     } finally { setLoading(false) }
   }
@@ -143,12 +143,12 @@ export default function BuyerPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-white flex items-center gap-2">
-              <span className="text-purple-400">🤖</span> AI Assistant
+              <span className="text-purple-400">🛒</span> Commerce Assistant
             </h1>
-            <p className="text-xs text-dark-400">Your personal shopping assistant</p>
+            <p className="text-xs text-dark-400">Online shopping help</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="badge-success">AI AGENT</span>
+            <span className="badge-success">ONLINE</span>
             <span className="badge-info text-[10px]">Session active</span>
           </div>
         </div>
@@ -159,8 +159,8 @@ export default function BuyerPage() {
         {messages.length === 0 && (
           <div className="text-center py-12 max-w-lg mx-auto">
             <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-4xl">🤖</span>
-            </div>              <h2 className="text-xl font-bold text-white mb-2">AI Commerce Assistant</h2>
+              <span className="text-4xl">🛒</span>
+            </div>              <h2 className="text-xl font-bold text-white mb-2">Commerce Assistant</h2>
             <p className="text-dark-400 text-sm mb-6">I can help you find products, compare options, and place orders. Just tell me what you're looking for!</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {SUGGESTIONS.map(s => (
@@ -280,7 +280,7 @@ export default function BuyerPage() {
           <button onClick={() => handleSend()} disabled={loading || !input.trim()}
             className="btn-primary px-6">{loading ? '...' : 'Send'}</button>
         </div>
-        <p className="text-[10px] text-dark-500 text-center mt-2">AI Growth & Commerce Agent · Shopping Assistant</p>
+        <p className="text-[10px] text-dark-500 text-center mt-2">Commerce Assistant · Online Shopping Help</p>
       </div>
     </div>
   )

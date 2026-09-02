@@ -306,16 +306,16 @@ def detect_intent(text: str) -> Dict[str, Any]:
     text_lower = text.lower().strip()
     entities = {}
 
-    # Extract price entities
-    price_match = re.search(r'(?:under|below|less\s+than|below)\s*(?:₹|rs\.?\s*)(\d[\d,]*)', text_lower)
+    # Extract price entities - with or without currency symbol
+    price_match = re.search(r'(?:under|below|less\s+than|below)\s*(?:₹|rs\.?\s*)?(\d[\d,]*)', text_lower)
     if price_match:
         entities["max_price"] = float(price_match.group(1).replace(",", ""))
 
-    price_match_high = re.search(r'(?:above|over|more\s+than|greater\s+than)\s*(?:₹|rs\.?\s*)(\d[\d,]*)', text_lower)
+    price_match_high = re.search(r'(?:above|over|more\s+than|greater\s+than)\s*(?:₹|rs\.?\s*)?(\d[\d,]*)', text_lower)
     if price_match_high:
         entities["min_price"] = float(price_match_high.group(1).replace(",", ""))
 
-    # Extract ₹ price
+    # Extract ₹ price (with currency symbol)
     rupee_match = re.search(r'(?:₹|rs\.?\s*)(\d[\d,]*)', text_lower)
     if rupee_match and "max_price" not in entities and "min_price" not in entities:
         entities["max_price"] = float(rupee_match.group(1).replace(",", ""))
@@ -605,6 +605,7 @@ async def call_llm(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]],
     """
     Main entry point - processes messages using rule-based intent detection.
     No external AI API is called.
+    Executes tool calls and returns results.
     """
     if not messages:
         return {"content": "Hello! How can I help you today?", "tool_calls": None, "quick_actions": QUICK_ACTIONS}
@@ -629,6 +630,24 @@ async def call_llm(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]],
 
     # Generate response
     response = await generate_response(intent_result, None, db=db, session_id=session_id)
+
+    # Execute tool calls if any
+    tool_calls = response.get("tool_calls") or []
+    if tool_calls and db:
+        from services.agent_tools import execute_tool
+        executed_tools = []
+        for tc in tool_calls:
+            tool_name = tc.get("name", "")
+            tool_args = tc.get("arguments", {})
+            try:
+                result_str = await execute_tool(tool_name, tool_args, db, session_id)
+                result_data = json.loads(result_str)
+                executed_tools.append({"name": tool_name, "arguments": tool_args, "result": result_data})
+            except Exception as e:
+                logger.error(f"Tool execution failed ({tool_name}): {e}")
+                executed_tools.append({"name": tool_name, "arguments": tool_args, "error": str(e)})
+        response["tool_calls"] = executed_tools
+
     return response
 
 

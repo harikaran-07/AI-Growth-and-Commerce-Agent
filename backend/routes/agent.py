@@ -85,12 +85,12 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         })
 
     # Extract structured data from the session store
-    # (tool functions stored results there during AFC execution)
+    # (tool functions stored results there during tool execution)
     try:
         from services.agent_tools import session_store
         if session_id in session_store:
             sess = session_store[session_id]
-            session_products = sess.get("product_results", [])
+            session_products = sess.get("last_search_results", []) or sess.get("product_results", [])
             if session_products:
                 products_found = session_products
             recommendations = sess.get("recommendations", []) or []

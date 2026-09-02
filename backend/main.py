@@ -65,12 +65,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS - allow all origins for production
+# CORS - restrict to production origins
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",") if os.getenv("ALLOWED_ORIGINS") else [
+    "https://ai-growth-and-commerce-agent.onrender.com",
+    "http://localhost:3000",
+    "http://localhost:8000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -147,6 +152,20 @@ async def health():
 # matched (i.e. it won't intercept /api/* or /health requests).
 # ────────────────────────────────────────────────────────────────
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+
 class FrontendStaticMiddleware(BaseHTTPMiddleware):
     """Serve Next.js static export files for non-API routes.
     
@@ -214,6 +233,9 @@ class FrontendStaticMiddleware(BaseHTTPMiddleware):
 # Mount static assets (CSS/JS bundles) and add the frontend middleware
 if os.path.isdir(os.path.join(FRONTEND_DIR, "_next")):
     app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="_next_static")
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Add frontend middleware LAST (runs after all route matching)
 app.add_middleware(FrontendStaticMiddleware)

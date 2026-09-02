@@ -77,8 +77,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     response_text = llm_response.get("content") or ""
     tool_calls = llm_response.get("tool_calls", []) or []
 
-    # Execute any pending tool calls directly
-    # (ensures tools run even if call_llm didn't execute them)
+    # Execute any pending tool calls directly and extract results
     for tc in tool_calls:
         tool_name = tc.get("name", "")
         tool_args = tc.get("arguments", {})
@@ -98,19 +97,35 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             "arguments": tc.get("arguments", {}),
         })
 
-    # Extract structured data from the session store
-    # (tool functions stored results there during tool execution)
-    try:
-        from services.agent_tools import session_store
-        if session_id in session_store:
-            sess = session_store[session_id]
-            session_products = sess.get("last_search_results", []) or sess.get("product_results", [])
-            if session_products:
-                products_found = session_products
-            recommendations = sess.get("recommendations", []) or []
-            cart_info = sess.get("cart_data")
-    except Exception:
-        pass
+    # Extract structured data from tool execution results directly
+    # This is more reliable than reading from session store
+    for tc in tool_calls:
+        result = tc.get("result", {})
+        if not result:
+            continue
+        tc_name = tc.get("name", "")
+        if tc_name == "search_products" and "products" in result:
+            products_found = result["products"]
+        elif tc_name == "get_cart" and "cart" in result:
+            cart_info = result["cart"]
+        elif tc_name == "recommend_cross_sell" and "recommendations" in result:
+            recommendations = result["recommendations"]
+        elif tc_name == "recommend_upsell" and "recommendations" in result:
+            recommendations = result["recommendations"]
+
+    # Fallback: try session store if direct extraction yielded nothing
+    if not products_found and not cart_info:
+        try:
+            from services.agent_tools import session_store
+            if session_id in session_store:
+                sess = session_store[session_id]
+                session_products = sess.get("last_search_results", []) or sess.get("product_results", [])
+                if session_products:
+                    products_found = session_products
+                recommendations = sess.get("recommendations", []) or []
+                cart_info = sess.get("cart_data")
+        except Exception:
+            pass
 
     # Get cart from session data as fallback
     if not cart_info:

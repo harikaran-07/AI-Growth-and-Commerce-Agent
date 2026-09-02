@@ -77,18 +77,19 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     response_text = llm_response.get("content") or ""
     tool_calls = llm_response.get("tool_calls", []) or []
 
-    # Execute any pending tool calls directly and extract results
+    # Execute ALL tool calls directly and extract results
+    # Always execute — don't trust prior execution state
     for tc in tool_calls:
         tool_name = tc.get("name", "")
         tool_args = tc.get("arguments", {})
-        if tool_name and not tc.get("result"):  # Only if not already executed
+        if tool_name:
             try:
                 result_str = await execute_tool(tool_name, tool_args, db, session_id)
                 result_data = json.loads(result_str)
                 tc["result"] = result_data
             except Exception as e:
                 logger.error(f"Tool execution failed ({tool_name}): {e}")
-                tc["error"] = str(e)
+                tc["result"] = {"error": str(e)}
 
     # Format tool calls for the frontend response
     for tc in tool_calls:
@@ -98,10 +99,9 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         })
 
     # Extract structured data from tool execution results directly
-    # This is more reliable than reading from session store
     for tc in tool_calls:
         result = tc.get("result", {})
-        if not result:
+        if not result or "error" in result:
             continue
         tc_name = tc.get("name", "")
         if tc_name == "search_products" and "products" in result:
@@ -113,27 +113,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         elif tc_name == "recommend_upsell" and "recommendations" in result:
             recommendations = result["recommendations"]
 
-    # Fallback: try session store if direct extraction yielded nothing
-    if not products_found and not cart_info:
-        try:
-            from services.agent_tools import session_store
-            if session_id in session_store:
-                sess = session_store[session_id]
-                session_products = sess.get("last_search_results", []) or sess.get("product_results", [])
-                if session_products:
-                    products_found = session_products
-                recommendations = sess.get("recommendations", []) or []
-                cart_info = sess.get("cart_data")
-        except Exception:
-            pass
 
-    # Get cart from session data as fallback
-    if not cart_info:
-        try:
-            sd = get_session_data(session_id)
-            cart_info = sd.get("cart_data")
-        except Exception:
-            pass
 
     if not response_text:
         if products_found:

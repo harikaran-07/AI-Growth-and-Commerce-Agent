@@ -118,7 +118,11 @@ async def _search_products(arguments: Dict, db: AsyncSession, session_id: str, s
     min_price = arguments.get("min_price")
 
     if category:
-        query = query.where(Product.category.ilike(f"%{category}%"))
+        from sqlalchemy import or_
+        query = query.where(or_(
+            Product.category.ilike(f"%{category}%"),
+            Product.subcategory.ilike(f"%{category}%"),
+        ))
     if max_price is not None:
         query = query.where(Product.price <= max_price)
     if min_price is not None:
@@ -130,7 +134,10 @@ async def _search_products(arguments: Dict, db: AsyncSession, session_id: str, s
         search_filter = or_(
             Product.name.ilike(f"%{search_text}%"),
             Product.description.ilike(f"%{search_text}%"),
-            Product.category.ilike(f"%{search_text}%")
+            Product.category.ilike(f"%{search_text}%"),
+            Product.subcategory.ilike(f"%{search_text}%"),
+            Product.tags.ilike(f"%{search_text}%"),
+            Product.brand.ilike(f"%{search_text}%"),
         )
         query = query.where(search_filter)
 

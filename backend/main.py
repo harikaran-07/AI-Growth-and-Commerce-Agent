@@ -8,13 +8,14 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from contextlib import asynccontextmanager
 from models.database import engine, Base, init_db
 from routes import products, carts, payments, agent, audit, analytics, policies, approvals, webhooks
 from routes import orders, notifications, pricing, synthetic
 import os
 import logging
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -148,29 +149,78 @@ async def health():
     }
 
 
-# Serve Next.js static frontend
-if os.path.isdir(os.path.join(FRONTEND_DIR, "_next")):
-    app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="_next_static")
+# ── Frontend static file serving ────────────────────────────────
+# We use a middleware so that it ONLY runs when no FastAPI route
+# matched (i.e. it won't intercept /api/* or /health requests).
+# ────────────────────────────────────────────────────────────────
 
-    @app.get("/{full_path:path}")
-    async def serve_frontend(request: Request, full_path: str):
-        file_path = os.path.join(FRONTEND_DIR, full_path)
+class FrontendStaticMiddleware(BaseHTTPMiddleware):
+    """Serve Next.js static export files for non-API routes.
+    
+    This middleware only activates when the FastAPI router returns 404,
+    meaning no API route or health route matched. It then tries to serve
+    static files from the frontend/out directory.
+    """
+    
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        # Only intercept 404 responses for non-API paths
+        if response.status_code != 404:
+            return response
+        
+        path = request.url.path
+        
+        # Skip API, docs, and internal paths
+        if (path.startswith("/api/") or path == "/api" or
+                path.startswith("/health") or
+                path.startswith("/docs") or path.startswith("/openapi") or
+                path.startswith("/redoc") or path.startswith("/_next") or
+                path.startswith("/favicon")):
+            return response
+        
+        # Try to serve from frontend/out directory
+        return await self._serve_frontend(path)
+    
+    async def _serve_frontend(self, path: str):
+        """Try to serve a static file from the frontend output directory."""
+        if not os.path.isdir(FRONTEND_DIR):
+            return JSONResponse(status_code=404, content={"error": "Frontend not built"})
+        
+        # Strip leading slash
+        rel = path.lstrip("/")
+        
+        # 1. Exact file match
+        file_path = os.path.join(FRONTEND_DIR, rel)
         if os.path.isfile(file_path):
             return FileResponse(file_path)
-        index_path = os.path.join(FRONTEND_DIR, full_path, "index.html")
+        
+        # 2. Directory index.html
+        index_path = os.path.join(FRONTEND_DIR, rel, "index.html")
         if os.path.isfile(index_path):
             return FileResponse(index_path)
-        html_path = os.path.join(FRONTEND_DIR, f"{full_path}.html")
+        
+        # 3. .html extension (Next.js static export: /products -> products.html)
+        html_path = os.path.join(FRONTEND_DIR, f"{rel}.html")
         if os.path.isfile(html_path):
             return FileResponse(html_path)
+        
+        # 4. Fallback to 404.html
         not_found = os.path.join(FRONTEND_DIR, "404.html")
         if os.path.isfile(not_found):
             return FileResponse(not_found, status_code=404)
+        
+        # 5. Last resort: root index.html
         root_index = os.path.join(FRONTEND_DIR, "index.html")
         if os.path.isfile(root_index):
             return FileResponse(root_index, status_code=404)
-        return {"message": "AI Growth and Commerce Agent", "version": "2.0.0"}
-else:
-    @app.get("/")
-    async def root():
-        return {"message": "AI Growth and Commerce Agent", "version": "2.0.0"}
+        
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+
+
+# Mount static assets (CSS/JS bundles) and add the frontend middleware
+if os.path.isdir(os.path.join(FRONTEND_DIR, "_next")):
+    app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="_next_static")
+
+# Add frontend middleware LAST (runs after all route matching)
+app.add_middleware(FrontendStaticMiddleware)

@@ -1,11 +1,15 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
+import Header from '@/components/Header'
 
 export const metadata: Metadata = {
   title: 'AI Growth and Commerce Agent',
   description: 'AI-powered commerce intelligence platform',
 }
+
+// Pages that use the customer-facing header (not the merchant sidebar)
+const CUSTOMER_PAGES = ['/product', '/buyer']
 
 export default function RootLayout({
   children,
@@ -22,9 +26,12 @@ export default function RootLayout({
       <body className="bg-dark-900 text-dark-100">
         <div className="flex h-screen overflow-hidden">
           <Sidebar />
-          <main className="flex-1 overflow-auto">
-            {children}
-          </main>
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 overflow-auto">
+              {children}
+            </main>
+          </div>
         </div>
       </body>
     </html>

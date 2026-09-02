@@ -159,7 +159,7 @@ export default function ProductsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {products.map(product => (
-            <div key={product.id} className="card-hover p-4 flex flex-col cursor-pointer" onClick={() => setSelectedProduct(product)}>
+            <a key={product.id} href={`/product?id=${product.id}`} className="card-hover p-4 flex flex-col">
               {/* Image placeholder */}
               <div className="h-28 bg-dark-700 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                 {product.image_url ? (
@@ -200,14 +200,14 @@ export default function ProductsPage() {
                   )}
                 </div>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleAddToCart(product.id) }}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAddToCart(product.id) }}
                   disabled={product.stock <= 0 || addingToCart === product.id}
                   className="btn-primary w-full mt-3 text-xs py-1.5"
                 >
                   {addingToCart === product.id ? 'Adding...' : product.stock > 0 ? '+ Add to Cart' : 'Out of Stock'}
                 </button>
               </div>
-            </div>
+            </a>
           ))}
         </div>
       )}

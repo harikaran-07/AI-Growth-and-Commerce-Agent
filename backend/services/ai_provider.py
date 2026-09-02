@@ -631,23 +631,7 @@ async def call_llm(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]],
     # Generate response
     response = await generate_response(intent_result, None, db=db, session_id=session_id)
 
-    # Execute tool calls if any
-    tool_calls = response.get("tool_calls") or []
-    if tool_calls and db:
-        from services.agent_tools import execute_tool
-        executed_tools = []
-        for tc in tool_calls:
-            tool_name = tc.get("name", "")
-            tool_args = tc.get("arguments", {})
-            try:
-                result_str = await execute_tool(tool_name, tool_args, db, session_id)
-                result_data = json.loads(result_str)
-                executed_tools.append({"name": tool_name, "arguments": tool_args, "result": result_data})
-            except Exception as e:
-                logger.error(f"Tool execution failed ({tool_name}): {e}")
-                executed_tools.append({"name": tool_name, "arguments": tool_args, "error": str(e)})
-        response["tool_calls"] = executed_tools
-
+    # Tool execution happens in agent.py chat endpoint (not here)
     return response
 
 

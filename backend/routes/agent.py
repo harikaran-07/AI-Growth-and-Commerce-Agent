@@ -7,7 +7,7 @@ No external AI API - uses built-in pattern matching and database queries.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import get_db
-from services.ai_provider import call_llm, get_tool_definitions
+from services.ai_provider import detect_intent, generate_response, get_tool_definitions, QUICK_ACTIONS
 from services.agent_tools import execute_tool, get_session_data
 from pydantic import BaseModel
 from typing import List, Optional, Any
@@ -39,89 +39,56 @@ class ChatResponse(BaseModel):
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """
     Main chat endpoint for the Commerce Assistant.
-    Uses rule-based intent detection and deterministic tool execution.
-    No external AI API is called.
+    Detects intent, executes tools, returns results directly.
     """
     session_id = request.session_id
     session_data = get_session_data(session_id)
-
-    # Build conversation history for the LLM
-    messages = session_data.get("conversation_history", [])
-    messages.append({"role": "user", "content": request.message})
-
-    # Keep conversation history manageable
-    if len(messages) > 20:
-        messages = messages[-20:]
 
     all_tool_calls_used = []
     products_found = []
     recommendations = []
     cart_info = None
-    approval_info = None
 
-    try:
-        # Single call - SYNC Chat API with AFC handles tool loop internally
-        llm_response = await call_llm(messages, get_tool_definitions(), db=db, session_id=session_id)
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}")
+    # Detect intent from user message
+    text = request.message.strip()
+    if not text:
         return ChatResponse(
-            message="Chat service is temporarily unavailable. You can still browse the merchant catalog.",
-            products=[],
-            recommendations=[],
-            tool_calls=[],
-            quick_actions=[{"label": "Find Products", "message": "Show me popular products"}, {"label": "Help", "message": "Help"}]
+            message="Please type a message and I'll help you!",
+            quick_actions=QUICK_ACTIONS,
         )
 
-    # AFC already executed tools and generated the final response.
-    # The response contains both the text and the tool calls log.
-    response_text = llm_response.get("content") or ""
-    tool_calls = llm_response.get("tool_calls", []) or []
+    intent_result = detect_intent(text)
+    intent = intent_result["intent"]
+    entities = intent_result["entities"]
+    logger.info(f"[CHAT] Intent: {intent} | Entities: {entities}")
 
-    # Execute ALL tool calls directly and extract results
-    # Always execute — don't trust prior execution state
-    logger.info(f"[CHAT] Processing {len(tool_calls)} tool calls for session {session_id}")
+    # Generate response text and tool calls
+    response = await generate_response(intent_result, None, db=db, session_id=session_id)
+    response_text = response.get("content") or ""
+    tool_calls = response.get("tool_calls") or []
+
+    # Execute each tool call directly
     for tc in tool_calls:
         tool_name = tc.get("name", "")
         tool_args = tc.get("arguments", {})
-        if tool_name:
-            try:
-                result_str = await execute_tool(tool_name, tool_args, db, session_id)
-                result_data = json.loads(result_str)
-                tc["result"] = result_data
-                logger.info(f"[CHAT] Tool {tool_name} executed, result keys: {list(result_data.keys()) if isinstance(result_data, dict) else type(result_data)}")
-            except Exception as e:
-                logger.error(f"[CHAT] Tool execution failed ({tool_name}): {e}")
-                tc["result"] = {"error": str(e)}
-        else:
-            logger.warning(f"[CHAT] Skipping tool call with no name: {tc}")
-
-    # Format tool calls for the frontend response
-    for tc in tool_calls:
-        all_tool_calls_used.append({
-            "tool": tc.get("name", "unknown"),
-            "arguments": tc.get("arguments", {}),
-        })
-
-    # Extract structured data from tool execution results directly
-    for tc in tool_calls:
-        result = tc.get("result", {})
-        if not result or "error" in result:
-            logger.info(f"[CHAT] Skipping tool result: error={result.get('error') if isinstance(result, dict) else 'empty'}")
+        if not tool_name:
             continue
-        tc_name = tc.get("name", "")
-        if tc_name == "search_products" and "products" in result:
-            products_found = result["products"]
-            logger.info(f"[CHAT] Extracted {len(products_found)} products from search")
-        elif tc_name == "get_cart" and "cart" in result:
-            cart_info = result["cart"]
-        elif tc_name == "recommend_cross_sell" and "recommendations" in result:
-            recommendations = result["recommendations"]
-        elif tc_name == "recommend_upsell" and "recommendations" in result:
-            recommendations = result["recommendations"]
-    logger.info(f"[CHAT] Final: {len(products_found)} products, response_text empty={not response_text}")
+        try:
+            result_str = await execute_tool(tool_name, tool_args, db, session_id)
+            result_data = json.loads(result_str)
+            all_tool_calls_used.append({"tool": tool_name, "arguments": tool_args})
 
+            # Extract data from tool results
+            if tool_name == "search_products" and "products" in result_data:
+                products_found = result_data["products"]
+            elif tool_name == "get_cart" and "cart" in result_data:
+                cart_info = result_data["cart"]
+            elif tool_name in ("recommend_cross_sell", "recommend_upsell") and "recommendations" in result_data:
+                recommendations = result_data["recommendations"]
+        except Exception as e:
+            logger.error(f"[CHAT] Tool {tool_name} failed: {e}")
 
-
+    # Build response message if not already set by intent handler
     if not response_text:
         if products_found:
             response_text = f"I found {len(products_found)} product(s) for you. Would you like to add any to your cart?"
@@ -133,21 +100,22 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             response_text = "I've processed your request. Is there anything else I can help with?"
 
     # Save conversation history
+    messages = session_data.get("conversation_history", [])
+    messages.append({"role": "user", "content": request.message})
     messages.append({"role": "assistant", "content": response_text})
+    if len(messages) > 20:
+        messages = messages[-20:]
     session_data["conversation_history"] = messages
-
-    # Extract quick_actions from response
-    quick_actions = llm_response.get("quick_actions", []) or []
 
     return ChatResponse(
         message=response_text,
         products=products_found,
         recommendations=recommendations,
         cart=cart_info,
-        approval=approval_info,
+        approval=None,
         payment=None,
         tool_calls=all_tool_calls_used,
-        quick_actions=quick_actions
+        quick_actions=response.get("quick_actions") or [],
     )
 
 

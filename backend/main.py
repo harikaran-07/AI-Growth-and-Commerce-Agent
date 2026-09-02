@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AI Growth and Commerce Agent",
     description="Commerce Agent for Razorpay Buildathon",
-    version="2.0.0",
+    version="2.1.0",
     lifespan=lifespan
 )
 
@@ -133,7 +133,7 @@ async def health():
     return {
         "status": "healthy",
         "service": "AI Growth and Commerce Agent",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "chatbot": {
             "type": "rule-based",
             "provider": "built-in",

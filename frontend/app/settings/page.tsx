@@ -8,7 +8,7 @@ interface Policy {
 }
 
 interface HealthStatus {
-  status: string; service: string; chatbot: { type: string; provider: string; mode: string }; razorpay: string; database: string;
+  status: string; service: string; chatbot: { type: string; provider: string; mode: string }; razorpay: string; database: string | { status: string; type: string };
 }
 
 export default function SettingsPage() {
@@ -63,7 +63,7 @@ export default function SettingsPage() {
           <StatusBox label="API" value={health?.status || 'Unknown'} ok={health?.status === 'healthy'} />
           <StatusBox label="Commerce Assistant" value={health?.chatbot?.type || 'rule-based'} ok />
           <StatusBox label="Razorpay" value={health?.razorpay || 'demo_mode'} ok={health?.razorpay !== 'not_configured'} />
-          <StatusBox label="Database" value={health?.database || 'sqlite'} ok />
+          <StatusBox label="Database" value={typeof health?.database === 'object' ? health.database.type : (health?.database || 'sqlite')} ok />
         </div>
       </div>
 

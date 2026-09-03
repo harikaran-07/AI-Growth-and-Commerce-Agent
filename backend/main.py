@@ -60,7 +60,14 @@ async def lifespan(app: FastAPI):
                     await remove_groceries()
                 except Exception as ge:
                     logger.error(f"Grocery cleanup failed: {ge}")
-    
+
+            # Fix product images: ensure each product has a unique, product-specific image
+            try:
+                from scripts.fix_product_images import fix_images
+                await fix_images()
+            except Exception as ie:
+                logger.error(f"Image fix migration failed: {ie}")
+
     except Exception as e:
         logger.error(f"Startup check failed: {e}")
         import traceback

@@ -478,7 +478,7 @@ async def seed():
                     sku=f"SKU-{pid[:8].upper()}",
                     rating=min(rating, 5.0),
                     tags=f"{category.lower()},{subcategory.lower()},{brand.lower()}",
-                    image_url=f"https://placehold.co/400x300/1e1b4b/ffffff?text={brand[:8]}+{subcategory[:8]}",
+                    image_url=f"https://placehold.co/400x300/1e1b4b/ffffff?text={name[:20].replace(' ', '+')}",
                 )
                 db.add(product)
                 product_ids.append(pid)

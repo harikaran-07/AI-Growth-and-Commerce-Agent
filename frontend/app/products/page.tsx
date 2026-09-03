@@ -160,10 +160,20 @@ export default function ProductsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {products.map(product => (
             <a key={product.id} href={`/product?id=${product.id}`} className="card-hover p-4 flex flex-col">
-              {/* Image placeholder */}
+              {/* Product Image */}
               <div className="h-28 bg-dark-700 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                 {product.image_url ? (
-                  <img src={product.image_url} alt={product.name} className="w-full h-full object-cover rounded-lg" onError={e => (e.target as HTMLImageElement).style.display='none'} />
+                  <img
+                    src={product.image_url}
+                    alt={product.name}
+                    className="w-full h-full object-cover rounded-lg"
+                    loading="lazy"
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement
+                      img.onerror = null
+                      img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect fill="#1e1b4b" width="200" height="200"/><text fill="#6366f1" font-family="Arial" font-size="14" text-anchor="middle" x="100" y="95">📦</text><text fill="#818cf8" font-family="Arial" font-size="11" text-anchor="middle" x="100" y="115">Product</text></svg>')
+                    }}
+                  />
                 ) : (
                   <span className="text-2xl">📦</span>
                 )}

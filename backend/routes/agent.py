@@ -79,8 +79,10 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             all_tool_calls_used.append({"tool": tool_name, "arguments": tool_args})
 
             # Extract data from tool results
-            if tool_name == "search_products" and "products" in result_data:
+            if tool_name in ("search_products", "get_bestsellers") and "products" in result_data:
                 products_found = result_data["products"]
+                if not response_text and result_data.get("message"):
+                    response_text = result_data["message"]
             elif tool_name == "get_cart" and "cart" in result_data:
                 cart_info = result_data["cart"]
             elif tool_name in ("recommend_cross_sell", "recommend_upsell") and "recommendations" in result_data:

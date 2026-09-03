@@ -49,6 +49,7 @@ class CartItemResponse(BaseModel):
     quantity: int
     price_at_time: float
     subtotal: float
+    image_url: Optional[str] = None
 
 
 class CartResponse(BaseModel):
@@ -87,7 +88,8 @@ async def _build_cart_response(db: AsyncSession, cart: Cart) -> CartResponse:
             product_name=p.name,
             quantity=ci.quantity,
             price_at_time=ci.price_at_time,
-            subtotal=ci.price_at_time * ci.quantity
+            subtotal=ci.price_at_time * ci.quantity,
+            image_url=p.image_url or None
         ))
     total = sum(i.subtotal for i in items)
     cart.total = total

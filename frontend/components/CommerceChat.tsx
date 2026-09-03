@@ -17,13 +17,18 @@ interface Product {
   name: string
   description: string
   category: string
+  subcategory?: string
   price: number
+  previous_price?: number
   currency: string
   stock: number
   position?: number
   rating?: number
   discount?: number
   brand?: string
+  image_url?: string
+  sales?: number
+  bestseller_score?: number
 }
 
 interface CartInfo {
@@ -50,21 +55,28 @@ const WELCOME_MESSAGE: Message = {
   role: 'assistant',
   content: "Hi! I'm your Commerce Assistant. I can help you find products, compare prices, check availability, and manage your cart.",
   quickActions: [
-    { label: 'Find Products', message: 'Show me popular products' },
-    { label: "Today's Deals", message: 'Show me deals and discounts' },
-    { label: 'Show Cart', message: 'Show my cart' },
-    { label: 'Track Order', message: 'Track my order' },
-    { label: 'Help', message: 'Help' },
+    { label: '🔥 Best Sellers', message: 'Show me best sellers' },
+    { label: '🔍 Find Products', message: 'Show me popular products' },
+    { label: '🏷️ Deals', message: 'Show me deals and discounts' },
+    { label: '🛒 Show Cart', message: 'Show my cart' },
+    { label: '📦 Track Order', message: 'Track my order' },
+    { label: '❓ Help', message: 'Help' },
   ],
   timestamp: new Date(),
 }
+
+const FALLBACK_IMAGE = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect fill="#1e1b4b" width="200" height="200"/><text fill="#6366f1" font-family="Arial,sans-serif" font-size="14" text-anchor="middle" x="100" y="95">📦</text><text fill="#818cf8" font-family="Arial,sans-serif" font-size="11" text-anchor="middle" x="100" y="115">Product</text></svg>'
+)
 
 export default function CommerceChat() {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [chatLoading, setChatLoading] = useState(false)
   const [minimized, setMinimized] = useState(false)
+  const [cartCount, setCartCount] = useState(0)
+  const [addingProductId, setAddingProductId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -75,6 +87,22 @@ export default function CommerceChat() {
         return sid
       })()
     : 'default'
+
+  useEffect(() => {
+    fetchCartCount()
+  }, [sessionId])
+
+  const fetchCartCount = async () => {
+    try {
+      const res = await fetch(`/api/carts/session/${sessionId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setCartCount(data.item_count || 0)
+      }
+    } catch (e) {
+      // Silently fail
+    }
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -88,7 +116,7 @@ export default function CommerceChat() {
 
   const handleSend = useCallback(async (text?: string) => {
     const messageText = (text || input).trim()
-    if (!messageText || loading) return
+    if (!messageText || chatLoading) return
 
     const userMsg: Message = {
       id: `u_${Date.now()}`,
@@ -98,7 +126,7 @@ export default function CommerceChat() {
     }
     setMessages(prev => [...prev, userMsg])
     setInput('')
-    setLoading(true)
+    setChatLoading(true)
 
     try {
       const res = await fetch('/api/agent/chat', {
@@ -127,35 +155,59 @@ export default function CommerceChat() {
         timestamp: new Date(),
       }])
     } finally {
-      setLoading(false)
+      setChatLoading(false)
     }
-  }, [input, loading, sessionId])
+  }, [input, chatLoading, sessionId])
 
   const handleAddToCart = useCallback(async (productId: string) => {
-    setLoading(true)
+    setAddingProductId(productId)
     try {
-      const res = await fetch('/api/agent/chat', {
+      const res = await fetch(`/api/carts/session/${sessionId}/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `Add product ${productId} to my cart`, session_id: sessionId }),
+        body: JSON.stringify({ product_id: productId, quantity: 1 }),
       })
-      const data: ChatResponse = await res.json()
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        const errorMsg = errorData.detail || errorData.error || 'Failed to add to cart'
+        throw new Error(errorMsg)
+      }
+
+      const cartData = await res.json()
+      setCartCount(cartData.item_count || 0)
+
+      // Show success message in chat
       setMessages(prev => [...prev, {
         id: `a_${Date.now()}`,
         role: 'assistant',
-        content: data.message,
-        cart: data.cart || undefined,
+        content: `✅ Added to your cart! (${cartData.item_count} item${cartData.item_count !== 1 ? 's' : ''} · ₹${cartData.total.toLocaleString()})`,
+        cart: {
+          cart_id: cartData.id,
+          total: cartData.total,
+          item_count: cartData.item_count,
+          items: cartData.items?.map((i: any) => ({
+            name: i.product_name,
+            quantity: i.quantity,
+            price: i.price_at_time,
+            subtotal: i.subtotal,
+          })),
+        },
+        quickActions: [
+          { label: '🛒 View Cart', message: 'Show my cart' },
+          { label: '🔍 Continue Shopping', message: 'Show me popular products' },
+        ],
         timestamp: new Date(),
       }])
-    } catch {
+    } catch (err: any) {
       setMessages(prev => [...prev, {
         id: `e_${Date.now()}`,
         role: 'assistant',
-        content: "Couldn't add to cart. Please try again.",
+        content: err.message || "Sorry, I couldn't add this product to your cart. Please try again.",
         timestamp: new Date(),
       }])
     } finally {
-      setLoading(false)
+      setAddingProductId(null)
     }
   }, [sessionId])
 
@@ -164,6 +216,19 @@ export default function CommerceChat() {
   }
 
   const formatTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+  const isBestseller = (p: Product): boolean => {
+    return (p.sales || 0) >= 50 || (p.rating || 0) >= 4.5
+  }
+
+  const hasDiscount = (p: Product): boolean => {
+    return !!(p.previous_price && p.previous_price > p.price)
+  }
+
+  const getDiscountPercent = (p: Product): number => {
+    if (!p.previous_price || p.previous_price <= p.price) return 0
+    return Math.round(((p.previous_price - p.price) / p.previous_price) * 100)
+  }
 
   return (
     <>
@@ -178,12 +243,17 @@ export default function CommerceChat() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
           <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white"></span>
+          {cartCount > 0 && (
+            <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-dark-900">
+              {cartCount}
+            </span>
+          )}
         </button>
       )}
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className={`fixed z-50 ${minimized ? 'bottom-6 right-6' : 'bottom-0 right-0 sm:bottom-6 sm:right-6 sm:w-[400px] sm:h-[600px] w-full h-full sm:rounded-2xl'} bg-dark-900 border border-dark-600 shadow-2xl flex flex-col overflow-hidden transition-all duration-300`}>
+        <div className={`fixed z-50 ${minimized ? 'bottom-6 right-6' : 'bottom-0 right-0 sm:bottom-6 sm:right-6 sm:w-[420px] sm:h-[620px] w-full h-full sm:rounded-2xl'} bg-dark-900 border border-dark-600 shadow-2xl flex flex-col overflow-hidden transition-all duration-300`}>
           {/* Header */}
           <div className="bg-dark-800 border-b border-dark-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
@@ -198,6 +268,11 @@ export default function CommerceChat() {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {cartCount > 0 && (
+                <a href="/cart" className="flex items-center gap-1 px-2 py-1 rounded-lg bg-dark-700 hover:bg-dark-600 text-dark-200 hover:text-white transition-colors text-[11px]">
+                  🛒 <span className="font-medium">{cartCount}</span>
+                </a>
+              )}
               <button onClick={clearChat} className="p-1.5 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors" title="Clear chat">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -225,7 +300,7 @@ export default function CommerceChat() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map(msg => (
                 <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-xl px-4 py-2.5 ${
+                  <div className={`max-w-[90%] rounded-xl px-4 py-2.5 ${
                     msg.role === 'user'
                       ? 'bg-primary-600 text-white'
                       : 'bg-dark-800 border border-dark-700 text-dark-100'
@@ -234,46 +309,78 @@ export default function CommerceChat() {
 
                     {/* Product Cards */}
                     {msg.products && msg.products.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {msg.products.slice(0, 5).map(p => (
-                          <div key={p.product_id} className="bg-dark-700/50 rounded-lg p-3 border border-dark-600">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-white truncate">{p.name}</p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-xs font-bold text-primary-400">₹{p.price.toLocaleString()}</span>
-                                  {p.brand && <span className="text-[10px] text-dark-400">{p.brand}</span>}
-                                  <span className="text-[10px] text-dark-500">{p.category}</span>
+                      <div className="mt-3 overflow-x-auto">
+                        <div className="flex gap-2 pb-2" style={{ minWidth: 'max-content' }}>
+                          {msg.products.slice(0, 5).map(p => (
+                            <div key={p.product_id} className="w-[200px] flex-shrink-0 bg-dark-700/50 rounded-lg border border-dark-600 overflow-hidden">
+                              {/* Product Image */}
+                              <div className="relative w-full h-[120px] bg-dark-800 overflow-hidden">
+                                <img
+                                  src={p.image_url || FALLBACK_IMAGE}
+                                  alt={p.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement
+                                    target.src = FALLBACK_IMAGE
+                                  }}
+                                />
+                                {isBestseller(p) && (
+                                  <span className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0.5 bg-amber-500/90 text-white rounded font-medium">
+                                    🔥 Bestseller
+                                  </span>
+                                )}
+                                {hasDiscount(p) && (
+                                  <span className="absolute top-1.5 right-1.5 text-[9px] px-1.5 py-0.5 bg-red-500/90 text-white rounded font-medium">
+                                    -{getDiscountPercent(p)}%
+                                  </span>
+                                )}
+                              </div>
+                              {/* Product Info */}
+                              <div className="p-2.5">
+                                <p className="text-xs font-medium text-white truncate leading-tight">{p.name}</p>
+                                {p.brand && (
+                                  <p className="text-[10px] text-dark-400 mt-0.5">{p.brand}</p>
+                                )}
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  <span className="text-sm font-bold text-primary-400">₹{p.price.toLocaleString()}</span>
+                                  {hasDiscount(p) && (
+                                    <span className="text-[10px] text-dark-500 line-through">₹{p.previous_price!.toLocaleString()}</span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
-                                  {p.rating && (
+                                  {p.rating ? (
                                     <span className="text-[10px] text-amber-400">★ {p.rating}</span>
-                                  )}
+                                  ) : null}
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                                     p.stock > 10 ? 'bg-emerald-500/10 text-emerald-400' :
                                     p.stock > 0 ? 'bg-amber-500/10 text-amber-400' :
                                     'bg-red-500/10 text-red-400'
                                   }`}>
-                                    {p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}
+                                    {p.stock > 0 ? (p.stock <= 10 ? `Only ${p.stock} left` : 'In Stock') : 'Out of stock'}
                                   </span>
                                 </div>
+                                {/* Action Buttons */}
+                                {p.stock > 0 && (
+                                  <div className="mt-2.5 flex gap-1.5">
+                                    <a
+                                      href={`/product?id=${p.product_id}`}
+                                      className="flex-1 text-center text-[10px] px-2 py-1.5 bg-dark-600 hover:bg-dark-500 text-dark-200 rounded transition-colors"
+                                    >
+                                      View
+                                    </a>
+                                    <button
+                                      onClick={() => handleAddToCart(p.product_id)}
+                                      disabled={addingProductId === p.product_id}
+                                      className="flex-1 text-[10px] px-2 py-1.5 bg-primary-600 hover:bg-primary-500 disabled:bg-primary-800 text-white rounded transition-colors"
+                                    >
+                                      {addingProductId === p.product_id ? 'Adding...' : '+ Add'}
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
-                            {p.stock > 0 && (
-                              <div className="mt-2 flex gap-2">
-                                <a href={`/product?id=${p.product_id}`} className="text-[10px] px-2.5 py-1 bg-dark-600 hover:bg-dark-500 text-dark-200 rounded transition-colors">
-                                  View Product
-                                </a>
-                                <button
-                                  onClick={() => handleAddToCart(p.product_id)}
-                                  className="text-[10px] px-2.5 py-1 bg-primary-600 hover:bg-primary-500 text-white rounded transition-colors"
-                                >
-                                  + Add to Cart
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -289,8 +396,8 @@ export default function CommerceChat() {
                           <div className="space-y-1 mb-2">
                             {msg.cart.items.map((item, i) => (
                               <div key={i} className="flex justify-between text-[11px] text-dark-300">
-                                <span>{item.name} × {item.quantity}</span>
-                                <span>₹{item.subtotal.toLocaleString()}</span>
+                                <span className="truncate mr-2">{item.name} × {item.quantity}</span>
+                                <span className="flex-shrink-0">₹{item.subtotal.toLocaleString()}</span>
                               </div>
                             ))}
                           </div>
@@ -321,7 +428,7 @@ export default function CommerceChat() {
                 </div>
               ))}
 
-              {loading && (
+              {chatLoading && (
                 <div className="flex justify-start">
                   <div className="bg-dark-800 border border-dark-700 rounded-xl px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -351,14 +458,14 @@ export default function CommerceChat() {
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
                   placeholder="Ask about products, prices, orders or your cart..."
                   className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-dark-100 placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                  disabled={loading}
+                  disabled={chatLoading}
                 />
                 <button
                   onClick={() => handleSend()}
-                  disabled={loading || !input.trim()}
+                  disabled={chatLoading || !input.trim()}
                   className="px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:bg-dark-600 disabled:text-dark-400 text-white rounded-lg text-sm font-medium transition-colors"
                 >
-                  {loading ? '...' : 'Send'}
+                  {chatLoading ? '...' : 'Send'}
                 </button>
               </div>
               <p className="text-[9px] text-dark-500 text-center mt-1.5">Commerce Assistant · No AI API required</p>

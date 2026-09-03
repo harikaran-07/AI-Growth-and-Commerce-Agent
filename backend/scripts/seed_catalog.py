@@ -304,34 +304,6 @@ EXTRA_ELECTRONICS = [
     ("Document Scanner Portable", 8999, 8), ("Label Maker", 3999, 12),
 ]
 
-EXTRA_GROCERY = [
-    ("Honey Pure 500g", 299, 35), ("Honey Organic 250g", 399, 25),
-    ("Peanut Butter Crunchy 400g", 249, 35), ("Peanut Butter Smooth 400g", 249, 35),
-    ("Oats Rolled 1kg", 199, 40), ("Oats Instant Flavored 400g", 149, 35),
-    ("Muesli Crunchy 500g", 299, 30), ("Granola Mixed Berries 300g", 399, 25),
-    ("Corn Flakes 500g", 179, 40), ("Poha Flattened Rice 500g", 79, 50),
-    ("Sooji Semolina 500g", 69, 45), ("Maida All-Purpose Flour 1kg", 49, 55),
-    ("Atta Whole Wheat 5kg", 299, 40), ("Atta Multi-Grain 1kg", 129, 35),
-    ("Besan Gram Flour 500g", 79, 45), ("Ragi Flour 500g", 99, 35),
-    ("Sugar 1kg", 55, 60), ("Sugar Free Sweetener 100 tabs", 149, 30),
-    ("Salt Iodized 1kg", 25, 65), ("Black Salt 200g", 35, 40),
-    ("Vinegar 500ml", 79, 35), ("Soy Sauce 200ml", 99, 30),
-    ("Tomato Ketchup 500g", 99, 45), ("Green Chutney 200g", 79, 30),
-    ("Pickle Mango 500g", 129, 40), ("Pickle Mixed 500g", 139, 35),
-    ("Papadum 200g", 69, 40), ("Ready to Eat Curry 400g", 149, 30),
-    ("Instant Soup Mix 60g", 45, 40), ("Baking Powder 100g", 69, 35),
-    ("Cocoa Powder 100g", 199, 25), ("Vanilla Essence 50ml", 149, 30),
-    ("Dry Fruits Mixed 200g", 399, 25), ("Almonds 200g", 299, 30),
-    ("Cashews 200g", 349, 25), ("Raisins 200g", 199, 30),
-    ("Dates 500g", 299, 30), ("Coconut Oil 500ml", 299, 35),
-    ("Mustard Oil 1L", 199, 40), ("Olive Oil 500ml", 499, 25),
-    ("Ghee 500ml", 349, 30), ("Curd 400g", 40, 45),
-    ("Paneer 200g", 80, 40), ("Cream 200ml", 69, 30),
-    ("Yogurt Strawberry 100g", 39, 35), ("Lassi Mango 200ml", 35, 35),
-    ("Juice Mango 1L", 99, 40), ("Juice Orange 1L", 99, 40),
-    ("Green Tea Chamomile 25 bags", 199, 25), ("Green Tea Jasmine 25 bags", 199, 25),
-    ("Coffee Decaf 100g", 399, 15), ("Coffee Filter 250g", 249, 30),
-]
 
 EXTRA_HOME = [
     ("Broom Standard", 199, 40), ("Mop Flat Cotton", 499, 30),
@@ -436,25 +408,6 @@ def generate_all_products():
             "tags": ",".join(tags_list),
         })
 
-    # Add extra grocery variants
-    for name, price, stock in EXTRA_GROCERY:
-        idx += 1
-        brand = name.split()[0] if len(name.split()) > 1 else "Generic"
-        tags_list = ["supermarket", "grocery", brand.lower()]
-        products.append({
-            "name": name,
-            "description": f"{name} - Quality grocery item",
-            "category": "Supermarket",
-            "subcategory": "Grocery",
-            "brand": brand,
-            "price": price,
-            "currency": "INR",
-            "stock": stock,
-            "sku": make_sku("GROCERY", name, idx),
-            "rating": round(random.uniform(3.0, 4.9), 1),
-            "tags": ",".join(tags_list),
-        })
-
     # Add extra home variants
     for name, price, stock in EXTRA_HOME:
         idx += 1
@@ -534,28 +487,10 @@ def generate_all_products():
                     "tags": f"{p['tags']},{color.lower()}",
                 })
         # Size/weight variants for supermarket
-        elif p["category"] == "Supermarket":
-            for weight in random.sample(WEIGHTS, min(3, len(WEIGHTS))):
-                variant_count += 1
-                price_mult = {"100g": 0.5, "200g": 0.7, "250g": 0.8, "500g": 1.0, "1kg": 1.8, "2kg": 3.2, "5kg": 7.5}
-                products.append({
-                    "name": f"{p['name']} {weight}",
-                    "description": f"{p['description']} - {weight} pack",
-                    "category": p["category"],
-                    "subcategory": p["subcategory"],
-                    "brand": p["brand"],
-                    "price": round(p["price"] * price_mult.get(weight, 1.0), 0),
-                    "currency": "INR",
-                    "stock": random.randint(10, 80),
-                    "sku": make_sku(p["subcategory"], p["name"] + weight, variant_count),
-                    "rating": round(random.uniform(3.0, 5.0), 1),
-                    "tags": f"{p['tags']},{weight}",
-                })
-
-    # Generate generic products to fill up to 10K+
+        el    # Generate generic products to fill up to 10K+
     generic_categories = [
         ("Electronics", "Accessories", ["Generic", "TechMax", "Digitize"]),
-        ("Supermarket", "Grocery", ["FreshMart", "DailyNeeds", "GreenLeaf"]),
+        ("Electronics", "Home Appliances", ["Samsung", "LG", "Whirlpool", "Bosch"]),
         ("Home & Kitchen", "Home", ["HomeStar", "ComfortPlus", "LivingWell"]),
         ("Personal Care", "Personal Care", ["GlowUp", "FreshFeel", "SkinCare+"]),
         ("Office & School", "Stationery", ["WriteRight", "PaperPlus", "InkWell"]),

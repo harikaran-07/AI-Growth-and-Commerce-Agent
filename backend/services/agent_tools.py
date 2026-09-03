@@ -102,6 +102,8 @@ async def execute_tool(
             return await _get_merchant_analytics(db, session_id)
         elif tool_name == "get_sales_recommendations":
             return await _get_sales_recommendations(db, session_id)
+        elif tool_name == "get_bestsellers":
+            return await _get_bestsellers(arguments, db, session_id, session_data)
         else:
             return json.dumps({"error": f"Unknown tool: {tool_name}"})
     except Exception as e:
@@ -151,9 +153,15 @@ async def _search_products(arguments: Dict, db: AsyncSession, session_id: str, s
             "name": p.name,
             "description": p.description,
             "category": p.category,
+            "subcategory": p.subcategory or "",
             "price": p.price,
+            "previous_price": p.previous_price,
             "currency": p.currency,
             "stock": p.stock,
+            "brand": p.brand or "",
+            "rating": p.rating or 0,
+            "image_url": p.image_url or "",
+            "sales": p.sales or 0,
             "position": len(products_list) + 1
         })
 
@@ -360,7 +368,8 @@ async def _add_to_cart(arguments: Dict, db: AsyncSession, session_id: str, sessi
             "name": product.name,
             "price": product.price,
             "quantity": quantity,
-            "subtotal": product.price * quantity
+            "subtotal": product.price * quantity,
+            "image_url": product.image_url or "",
         },
         "cart": {
             "cart_id": cart_id,
@@ -787,3 +796,67 @@ async def _get_sales_recommendations(db: AsyncSession, session_id: str) -> str:
     )
 
     return json.dumps({"recommendations": recommendations, "count": len(recommendations)})
+
+
+async def _get_bestsellers(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:
+    """Get best-selling products based on sales, rating, and revenue."""
+    limit = arguments.get("limit", 5)
+    if not isinstance(limit, int) or limit < 1:
+        limit = 5
+    limit = min(limit, 10)
+
+    result = await db.execute(
+        select(Product).where(
+            Product.stock > 0,
+            Product.is_active == True,
+        )
+    )
+    products = result.scalars().all()
+
+    scored = []
+    for p in products:
+        sales_score = (p.sales or 0) / 10.0
+        rating_score = (p.rating or 0) * 10
+        revenue_score = (p.revenue or 0) / 1000.0
+        stock_bonus = 10 if (p.stock or 0) > 10 else 0
+        total_score = sales_score + rating_score + revenue_score + stock_bonus
+        scored.append((p, total_score))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    top_products = scored[:limit]
+
+    products_list = []
+    for p, score in top_products:
+        products_list.append({
+            "product_id": p.id,
+            "name": p.name,
+            "description": p.description or "",
+            "category": p.category,
+            "subcategory": p.subcategory or "",
+            "price": p.price,
+            "previous_price": p.previous_price,
+            "currency": p.currency,
+            "stock": p.stock,
+            "brand": p.brand or "",
+            "rating": p.rating or 0,
+            "image_url": p.image_url or "",
+            "sales": p.sales or 0,
+            "revenue": p.revenue or 0,
+            "bestseller_score": round(score, 2),
+        })
+
+    session_data["last_search_results"] = products_list
+
+    await log_audit_event(
+        db, session_id, "BESTSELLERS_VIEWED",
+        tool_called="get_bestsellers",
+        input_data=json.dumps({"limit": limit}),
+        decision=f"Found {len(products_list)} bestsellers",
+        final_status="success"
+    )
+
+    return json.dumps({
+        "products": products_list,
+        "count": len(products_list),
+        "message": f"Here are our top {len(products_list)} best-selling products!"
+    })

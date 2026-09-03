@@ -259,56 +259,7 @@ ELECTRONICS_PRODUCTS = [
     ("Portronics Car Mount", "Portronics Car Mobile Holder Mount", "Electronics", "Accessories", "Portronics", 599, 65),
 ]
 
-GROCERY_PRODUCTS = [
-    ("India Gate Basmati Rice 5kg", "Premium long grain basmati rice", "Grocery", "Rice", "India Gate", 649, 100),
-    ("Daawat Rozana Basmati 5kg", "Everyday basmati rice for daily meals", "Grocery", "Rice", "Daawat", 499, 120),
-    ("Tata Sampann Basmati 1kg", "Premium basmati rice for special dishes", "Grocery", "Rice", "Tata", 149, 150),
-    ("Fortune Sunlite Refined 1L", "Sunflower refined oil 1 litre", "Grocery", "Cooking Oil", "Fortune", 179, 200),
-    ("Saffola Gold 1L", "Saffola Gold refined cooking oil", "Grocery", "Cooking Oil", "Saffola", 219, 150),
-    ("Toor Dal 1kg", "Premium toor dal (arhar dal) 1kg", "Grocery", "Pulses", "Tata Sampann", 159, 200),
-    ("Chana Dal 1kg", "High quality chana dal 1kg", "Grocery", "Pulses", "Tata Sampann", 129, 180),
-    ("Moong Dal 1kg", "Washed moong dal 1kg pack", "Grocery", "Pulses", "Tata Sampann", 139, 170),
-    ("Turmeric Powder 500g", "Pure turmeric powder for cooking", "Grocery", "Spices", "Everest", 79, 250),
-    ("Red Chilli Powder 500g", "Kashmiri red chilli powder", "Grocery", "Spices", "Everest", 99, 230),
-    ("Garam Masala 100g", "Everest garam masala blend", "Grocery", "Spices", "Everest", 69, 280),
-    ("Table Salt 1kg", "Tata Salt iodized table salt 1kg", "Grocery", "Salt", "Tata", 28, 500),
-    ("Sugar 1kg", "Domestic refined sugar 1kg", "Grocery", "Sugar", "Madhur", 52, 400),
-    ("Tata Tea Gold 500g", "Premium CTC tea blend 500g", "Grocery", "Tea", "Tata", 199, 300),
-    ("Nescafe Classic 100g", "Nescafe Classic instant coffee 100g", "Grocery", "Coffee", "Nescafe", 199, 250),
-    ("Quaker Oats 1kg", "Quaker whole grain rolled oats 1kg", "Grocery", "Oats", "Quaker", 299, 200),
-    ("Maggi Noodles 70g", "Maggi 2-Minute Masala Noodles 70g", "Grocery", "Noodles", "Maggi", 14, 800),
-    ("Cadbury Dairy Milk 150g", "Cadbury Dairy Milk chocolate 150g", "Grocery", "Chocolates", "Cadbury", 99, 300),
-    ("Parle-G Biscuit 80g", "Parle-G glucose biscuits 80g", "Grocery", "Biscuits", "Parle", 10, 1000),
-    ("Aashirvaad Atta 5kg", "Aashirvaad Select Sharbati Atta 5kg", "Grocery", "Flour", "Aashirvaad", 349, 200),
-    ("Amul Butter 100g", "Amul Pasteurised Butter 100g", "Grocery", "Packaged Foods", "Amul", 56, 300),
-    ("Haldirams Aloo Bhujia 200g", "Haldirams Aloo Bhujia snack 200g", "Grocery", "Snacks", "Haldirams", 69, 350),
-    ("Lays Classic Salted 52g", "Lays Classic Salted potato chips 52g", "Grocery", "Snacks", "Lays", 20, 600),
-    ("Real Mango Juice 1L", "Real Fruit Power Mango Juice 1L", "Grocery", "Juices", "Real", 99, 200),
-    ("Tropicana Mixed Fruit 1L", "Tropicana Mixed Fruit juice 1L", "Grocery", "Juices", "Tropicana", 119, 180),
-    ("MDH Chana Masala 100g", "MDH Chana Masala spice blend 100g", "Grocery", "Spices", "MDH", 79, 300),
-    ("Pillsbury Atta 5kg", "Pillsbury Chakki Fresh Atta 5kg", "Grocery", "Flour", "Pillsbury", 299, 220),
-    ("Horlicks 500g", "Horlicks Classic Malt 500g health drink", "Grocery", "Cereals", "Horlicks", 279, 180),
-    ("Bournvita 500g", "Cadbury Bournvita 500g health drink", "Grocery", "Cereals", "Cadbury", 329, 160),
-    ("Pedigree Dog Food 3kg", "Pedigree Adult Dry Dog Food 3kg", "Grocery", "Packaged Foods", "Pedigree", 499, 100),
-]
 
-SUPERMARKET_PRODUCTS = [
-    ("Surf Excel Matic 1L", "Surf Excel Matic Liquid Detergent 1L", "Supermarket", "Detergents", "Surf Excel", 199, 100),
-    ("Tide Original 1kg", "Tide Original Powder Detergent 1kg", "Supermarket", "Detergents", "Tide", 159, 120),
-    ("Harpic Power Plus 1L", "Harpic Power Plus Toilet Cleaner 1L", "Supermarket", "Cleaning", "Harpic", 99, 150),
-    ("Lizol Floor Cleaner 975ml", "Lizol Citrus Floor Cleaner 975ml", "Supermarket", "Cleaning", "Lizol", 169, 130),
-    ("Vim Dishwash Liquid 500ml", "Vim Dishwash Liquid Lemon 500ml", "Supermarket", "Dishwashing", "Vim", 99, 180),
-    ("Colin Glass Cleaner 500ml", "Colin Glass & Surface Cleaner 500ml", "Supermarket", "Cleaning", "Colin", 79, 160),
-    ("Eveready AA Batteries 10pc", "Eveready Red AA Batteries 10 pack", "Supermarket", "Batteries", "Eveready", 149, 200),
-    ("Duracell AA Batteries 8pc", "Duracell Coppertop AA 8 pack", "Supermarket", "Batteries", "Duracell", 299, 120),
-    ("Milton Water Bottle 750ml", "Milton Thermosteel Bottle 750ml", "Supermarket", "Kitchen", "Milton", 599, 60),
-    ("Dettol Liquid 200ml", "Dettol Antiseptic Liquid 200ml", "Supermarket", "Health", "Dettol", 89, 200),
-    ("Prestige Induction Cooktop", "Prestige PIC 16.0+ Induction Cooktop", "Supermarket", "Kitchen", "Prestige", 2999, 25),
-    ("Butterfly Cooker 5L", "Butterfly Deluxe Plus 5L Pressure Cooker", "Supermarket", "Kitchen", "Butterfly", 1799, 30),
-    ("Borosil Glass Container 400ml", "Borosil Klip N Store Glass Container", "Supermarket", "Storage", "Borosil", 349, 40),
-    ("Nilkamal Plastic Chair", "Nilkamal Freedom HD Plastic Chair", "Supermarket", "Furniture", "Nilkamal", 2299, 30),
-    ("Cello Dinner Set 18pc", "Cello Opalware Dinner Set 18pc", "Supermarket", "Kitchen", "Cello", 1499, 30),
-]
 
 CLOTHING_PRODUCTS = [
     ("Men's Cotton Round Neck T-Shirt", "Premium cotton round neck t-shirt", "Fashion", "T-shirts", "Allen Solly", 799, 60),
@@ -412,12 +363,6 @@ def generate_scaled_products():
     # Electronics: ~150 base → scale to ~3000
     all_products.extend(generate_variant_products(ELECTRONICS_PRODUCTS, 20))
 
-    # Grocery: ~30 base → scale to ~2000
-    all_products.extend(generate_variant_products(GROCERY_PRODUCTS, 65))
-
-    # Supermarket: ~15 base → scale to ~1500
-    all_products.extend(generate_variant_products(SUPERMARKET_PRODUCTS, 100))
-
     # Clothing: ~30 base → scale to ~2000
     all_products.extend(generate_variant_products(CLOTHING_PRODUCTS, 65))
 
@@ -454,26 +399,6 @@ def generate_scaled_products():
         ("Fashion", "Gloves", ["Puma", "Under Armour", "Holloway", "Mechanix", "Decathlon"], (199, 2999), 20, 80),
         ("Fashion", "Beanies", ["North Face", "Puma", "H&M", "Decathlon", "Tommy"], (299, 1999), 15, 100),
         ("Fashion", "Bow Ties", ["Van Heusen", "Allen Solly", "Raymond", "Park Avenue", "Generic"], (199, 1999), 10, 60),
-        ("Grocery", "Instant Noodles", ["Maggi", "Yippee", "Top Ramen", "Knorr", "Pattal"], (14, 99), 50, 500),
-        ("Grocery", "Biscuits", ["Parle", "Britannia", "Oreo", "Cadbury", "Good Day"], (10, 199), 60, 800),
-        ("Grocery", "Chocolates", ["Cadbury", "Nestle", "Amul", "Ferrero", "Mars"], (20, 599), 40, 400),
-        ("Grocery", "Chips", ["Lays", "Kurkure", "Pringles", "Haldirams", "Bingo"], (10, 199), 50, 600),
-        ("Grocery", "Soft Drinks", ["Coca Cola", "Pepsi", "Sprite", "Fanta", "Thums Up"], (10, 40), 60, 500),
-        ("Grocery", "Water Bottles", ["Bisleri", "Kinley", "Aquafina", "Himalayan", "Oxyrich"], (10, 50), 80, 1000),
-        ("Grocery", "Milk Products", ["Amul", "Mother Dairy", "Nestle", "Amul", "Britannia"], (20, 299), 40, 300),
-        ("Grocery", "Breakfast Cereals", ["Kellogg's", "Quaker", "Muesli", "Nature Valley", "Grab", "True Elements"], (99, 599), 30, 200),
-        ("Grocery", "Health Drinks", ["Horlicks", "Bournvita", "Complan", "Boost", "Pediasure"], (149, 599), 25, 150),
-        ("Grocery", "Dry Fruits", ["Happilo", "Nutraj", "True Elements", "Solimo", "Tattva"], (99, 999), 35, 200),
-        ("Grocery", "Honey", ["Dabur", "Patanjali", "Saffola", "Nature Nate's", "Hitkari"], (99, 499), 30, 180),
-        ("Grocery", "Pickles", ["Kissan", "Mother's Recipe", "Chatpat", "Dabur", "Patanjali"], (59, 249), 35, 250),
-        ("Supermarket", "Shampoos", ["Head & Shoulders", "Pantene", "Dove", "TRESemme", "L'Oreal"], (99, 599), 40, 300),
-        ("Supermarket", "Soaps", ["Dettol", "Lux", "Dove", "Pears", "Cinthol"], (20, 199), 50, 400),
-        ("Supermarket", "Toothpaste", ["Colgate", "Pepsodent", "Sensodyne", "CloseUp", "Patanjali"], (30, 299), 45, 350),
-        ("Supermarket", "Face Wash", ["Himalaya", "Neutrogena", "Garnier", "Cetaphil", "Clean & Clear"], (99, 599), 30, 200),
-        ("Supermarket", "Body Lotion", ["Nivea", "Vaseline", "Ponds", "Dove", "Johnson's"], (99, 499), 25, 180),
-        ("Supermarket", "Hand Wash", ["Dettol", "Lifebuoy", "Himalaya", "Dove", "Savlon"], (49, 299), 40, 250),
-        ("Supermarket", "Tissues", ["Kleenex", "Tempo", "Origins", "Fine", "Paseo"], (59, 299), 30, 200),
-        ("Supermarket", "Garbage Bags", ["OxyClean", "Glad", "Freshwrapp", "Amazon Basics", "Pureit"], (99, 499), 25, 150),
     ]
 
     for cat, sub, brands, price_range, min_stock, max_stock in categories_data:

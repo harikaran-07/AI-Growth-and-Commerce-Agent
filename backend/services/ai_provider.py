@@ -140,6 +140,13 @@ INTENT_PATTERNS = [
         r"\b(compare|difference|vs|versus|better|which\s+(one|is))\s+(between|of|the)\b"
     ]},
 
+    # Best Sellers
+    {"intent": "best_sellers", "patterns": [
+        r"\b(best\s*sellers?|bestselling|best\s*selling|top\s*selling|most\s*sold|trending\s*now|what('s|\s+is)\s+popular)\b",
+        r"\b(show|find|get|give|display|list)\s+(me\s+)?(the\s+)?(best\s*sellers?|top\s*products?)\b",
+        r"\b(best\s*products?|popular\s*products?)\b"
+    ]},
+
     # Recommendations
     {"intent": "recommendation", "patterns": [
         r"\b(recommend|suggest|best|top|popular|trending|what\s+(should|do)\s+(I|you)\s+(buy|suggest))\b",
@@ -158,11 +165,10 @@ INTENT_PATTERNS = [
     # Category search
     {"intent": "category_search", "patterns": [
         r"\b(show|find|search|look\s+for|browse|list|display)\s+(me\s+)?(all\s+)?(the\s+)?\b",
-        r"\b(electronics|smartphones?|phones?|laptops?|tablets?|headphones?|earphones?|speakers?|cameras?|watches?|tvs?|monitors?|keyboards?|mice|ssds?|routers?|power\s*banks?|webcams?|printers?|projectors?)\b",
-        r"\b(grocery|groceries|food|rice|dal|oil|tea|coffee|snacks?|biscuits?|chocolate|noodles?|spices?)\b",
+        r"\b(electronics|smartphones?|phones?|laptops?|tablets?|headphones?|earphones?|speakers?|cameras?|watches?|tvs?|television|monitors?|keyboards?|mice|ssds?|routers?|power\s*banks?|webcams?|printers?|projectors?)\b",
         r"\b(fashion|clothes?|t-?shirts?|shoes?|footwear|sneakers?)\b",
-        r"\b(supermarket|detergent|cleaning|household)\b",
-        r"\b(smart\s*watches?|fitness\s*trackers?)\b"
+        r"\b(smart\s*watches?|fitness\s*trackers?)\b",
+        r"\b(best\s*sellers?|bestselling|trending|popular)\b"
     ]},
 
     # Product search (general)
@@ -243,25 +249,6 @@ CATEGORY_ALIASES = {
     "printers": "Printers",
     "projector": "Projectors",
     "projectors": "Projectors",
-    "grocery": "Grocery",
-    "groceries": "Grocery",
-    "food": "Grocery",
-    "rice": "Grocery",
-    "dal": "Grocery",
-    "oil": "Grocery",
-    "tea": "Grocery",
-    "coffee": "Grocery",
-    "snack": "Grocery",
-    "snacks": "Grocery",
-    "biscuit": "Grocery",
-    "biscuits": "Grocery",
-    "chocolate": "Grocery",
-    "noodle": "Grocery",
-    "noodles": "Grocery",
-    "spice": "Grocery",
-    "spices": "Grocery",
-    "flour": "Grocery",
-    "atta": "Grocery",
     "fashion": "Fashion",
     "clothes": "Fashion",
     "clothing": "Fashion",
@@ -272,10 +259,6 @@ CATEGORY_ALIASES = {
     "sneaker": "Fashion",
     "sneakers": "Fashion",
     "footwear": "Fashion",
-    "supermarket": "Supermarket",
-    "detergent": "Supermarket",
-    "cleaning": "Supermarket",
-    "household": "Supermarket",
     "accessories": "Accessories",
     "accessory": "Accessories",
     "cable": "Accessories",
@@ -290,11 +273,12 @@ CATEGORY_ALIASES = {
 
 # Quick action buttons for the chatbot
 QUICK_ACTIONS = [
-    {"label": "Find Products", "message": "Show me popular products"},
-    {"label": "Today's Deals", "message": "Show me deals and discounts"},
-    {"label": "Show Cart", "message": "Show my cart"},
-    {"label": "Track Order", "message": "Track my order"},
-    {"label": "Help", "message": "Help"},
+    {"label": "🔥 Best Sellers", "message": "Show me best sellers"},
+    {"label": "🔍 Find Products", "message": "Show me popular products"},
+    {"label": "🏷️ Deals", "message": "Show me deals and discounts"},
+    {"label": "🛒 Show Cart", "message": "Show my cart"},
+    {"label": "📦 Track Order", "message": "Track my order"},
+    {"label": "❓ Help", "message": "Help"},
 ]
 
 
@@ -456,6 +440,12 @@ async def generate_response(intent_result: Dict, tools_fn, db=None, session_id: 
             "quick_actions": [
                 {"label": "View Orders", "message": "Show my orders"},
             ],
+        }
+
+    if intent == "best_sellers":
+        return {
+            "content": None,
+            "tool_calls": [{"name": "get_bestsellers", "arguments": {"limit": 5}}],
         }
 
     if intent == "payment_help":

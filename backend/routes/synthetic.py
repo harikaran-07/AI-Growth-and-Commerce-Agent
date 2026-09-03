@@ -14,7 +14,7 @@ router = APIRouter()
 # Seed for reproducible but realistic data
 random.seed(42)
 
-CATEGORIES = ["Electronics", "Smartphones", "Laptops", "Accessories", "Audio", "Televisions", "Home Appliances", "Groceries", "Fashion", "Personal Care"]
+CATEGORIES = ["Electronics", "Smartphones", "Laptops", "Accessories", "Audio", "Televisions", "Home Appliances", "Fashion", "Personal Care"]
 
 PRODUCTS = [
     {"name": "Samsung Galaxy A55", "category": "Smartphones", "price": 28999, "cost": 18000, "rating": 4.3},
@@ -37,8 +37,6 @@ PRODUCTS = [
     {"name": "Portronics Car Mount", "category": "Accessories", "price": 599, "cost": 180, "rating": 3.9},
     {"name": "LG 7kg Washing Machine", "category": "Home Appliances", "price": 32999, "cost": 20000, "rating": 4.4},
     {"name": "Prestige Induction Cooktop", "category": "Home Appliances", "price": 2999, "cost": 1500, "rating": 4.1},
-    {"name": "Aashirvaad Atta 5kg", "category": "Groceries", "price": 349, "cost": 280, "rating": 4.3},
-    {"name": "Cadbury Dairy Milk 150g", "category": "Groceries", "price": 99, "cost": 65, "rating": 4.5},
     {"name": "Men's Cotton T-Shirt", "category": "Fashion", "price": 799, "cost": 300, "rating": 4.0},
     {"name": "Nike Revolution 6", "category": "Fashion", "price": 3995, "cost": 1800, "rating": 4.3},
     {"name": "Dettol Liquid 200ml", "category": "Personal Care", "price": 89, "cost": 45, "rating": 4.4},

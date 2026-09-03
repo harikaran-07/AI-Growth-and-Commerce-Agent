@@ -6,6 +6,7 @@ import { sanitizeProductName, formatPrice } from '../utils'
 interface CartItem {
   id: string; product_id: string; product_name: string;
   quantity: number; price_at_time: number; subtotal: number;
+  image_url?: string;
 }
 
 interface Cart {
@@ -341,9 +342,24 @@ export default function CartPage() {
             <div className="lg:col-span-2 space-y-3">
               {cart!.items.map(item => (
                 <div key={item.id} className="card p-4 flex items-center gap-4">
-                  <div className="w-16 h-16 bg-dark-700 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <span className="text-2xl">📦</span>
-                  </div>
+                  <a href={`/product?id=${item.product_id}`} className="w-16 h-16 bg-dark-700 rounded-lg flex-shrink-0 overflow-hidden">
+                    {item.image_url ? (
+                      <img
+                        src={item.image_url}
+                        alt={item.product_name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement
+                          img.onerror = null
+                          img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 64 64\"><rect fill=\"#1e1b4b\" width=\"64\" height=\"64\"/><text fill=\"#6366f1\" font-family=\"Arial\" font-size=\"20\" text-anchor=\"middle\" x=\"32\" y=\"37\">📦</text></svg>')
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-dark-700">
+                        <span className="text-2xl">📦</span>
+                      </div>
+                    )}
+                  </a>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-white text-sm truncate">{sanitizeProductName(item.product_name)}</h3>
                     <p className="text-xs text-dark-400">₹{item.price_at_time.toLocaleString()} each</p>

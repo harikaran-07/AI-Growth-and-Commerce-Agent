@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
 import Header from '@/components/Header'
-import CommerceChat from '@/components/CommerceChat'
 
 export const metadata: Metadata = {
   title: 'AI Growth and Commerce Agent',
@@ -34,7 +33,6 @@ export default function RootLayout({
             </main>
           </div>
         </div>
-        <CommerceChat />
       </body>
     </html>
   )

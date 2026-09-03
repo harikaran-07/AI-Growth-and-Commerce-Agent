@@ -1,266 +1,397 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { sanitizeProductName, formatPrice } from '../utils'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { sanitizeProductName } from '../utils'
 
 interface Message {
-  id: string; role: 'user' | 'assistant'; content: string;
-  products?: Product[]; recommendations?: Recommendation[];
-  cart?: CartInfo; approval?: ApprovalInfo; paymentStatus?: string;
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  products?: Product[]
+  cart?: CartInfo
+  quickActions?: QuickAction[]
+  timestamp: Date
 }
 
 interface Product {
-  product_id: string; name: string; description: string; category: string;
-  price: number; currency: string; stock: number; position?: number;
-}
-
-interface Recommendation {
-  product_id: string; name: string; price: number; reason: string; type: string;
+  product_id: string
+  name: string
+  description: string
+  category: string
+  subcategory?: string
+  price: number
+  previous_price?: number
+  currency: string
+  stock: number
+  position?: number
+  rating?: number
+  discount?: number
+  brand?: string
+  image_url?: string
+  sales?: number
+  bestseller_score?: number
 }
 
 interface CartInfo {
-  cart_id: string; total: number; item_count: number; items?: any[];
+  cart_id: string
+  total: number
+  item_count: number
+  items?: { name: string; quantity: number; price: number; subtotal: number }[]
 }
 
-interface ApprovalInfo {
-  approval_id: string; order_id: string; status: string; total: number; message: string;
+interface QuickAction {
+  label: string
+  message: string
 }
 
 interface ChatResponse {
-  message: string; products: Product[]; recommendations: Recommendation[];
-  cart: CartInfo | null; approval: ApprovalInfo | null; payment: any; tool_calls: any[];
+  message: string
+  products: Product[]
+  cart: CartInfo | null
+  quick_actions: QuickAction[]
 }
 
-const SUGGESTIONS = [
-  "Find wireless headphones",
-  "I need a phone under ₹30,000",
-  "Show me laptops for programming",
-  "Find accessories for my phone",
-  "What's on sale today?",
-  "I want something with a good camera",
-  "Find the best deals under ₹5,000",
-  "Show me trending products",
-  "I need a gift for someone",
-  "Compare wireless earbuds",
-]
+const WELCOME_MESSAGE: Message = {
+  id: 'welcome',
+  role: 'assistant',
+  content: "Hi! I'm your Commerce Assistant. I can help you find products, compare prices, check availability, and manage your cart.",
+  quickActions: [
+    { label: '🔥 Best Sellers', message: 'Show me best sellers' },
+    { label: '🔍 Find Products', message: 'Show me popular products' },
+    { label: '🏷️ Deals', message: 'Show me deals and discounts' },
+    { label: '🛒 Show Cart', message: 'Show my cart' },
+    { label: '📦 Track Order', message: 'Track my order' },
+    { label: '❓ Help', message: 'Help' },
+  ],
+  timestamp: new Date(),
+}
+
+const FALLBACK_IMAGE = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect fill="#1e1b4b" width="200" height="200"/><text fill="#6366f1" font-family="Arial,sans-serif" font-size="14" text-anchor="middle" x="100" y="95">📦</text><text fill="#818cf8" font-family="Arial,sans-serif" font-size="11" text-anchor="middle" x="100" y="115">Product</text></svg>'
+)
 
 export default function BuyerPage() {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [sessionId] = useState(() => {
-    if (typeof window !== 'undefined') {
-      let sid = localStorage.getItem('session_id')
-      if (!sid) { sid = `sess_${Date.now()}`; localStorage.setItem('session_id', sid) }
-      return sid
-    }
-    return `sess_${Date.now()}`
-  })
-  const [pendingApproval, setPendingApproval] = useState<ApprovalInfo | null>(null)
+  const [chatLoading, setChatLoading] = useState(false)
+  const [cartCount, setCartCount] = useState(0)
+  const [addingProductId, setAddingProductId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const sessionId = typeof window !== 'undefined'
+    ? localStorage.getItem('session_id') || (() => {
+        const sid = `sess_${Date.now()}`
+        localStorage.setItem('session_id', sid)
+        return sid
+      })()
+    : 'default'
+
+  useEffect(() => {
+    fetchCartCount()
+    inputRef.current?.focus()
+  }, [sessionId])
+
+  const fetchCartCount = async () => {
+    try {
+      const res = await fetch(`/api/carts/session/${sessionId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setCartCount(data.item_count || 0)
+      }
+    } catch (e) {}
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = async (text?: string) => {
+  const handleSend = useCallback(async (text?: string) => {
     const messageText = (text || input).trim()
-    if (!messageText || loading) return
-    setMessages(prev => [...prev, { id: `u_${Date.now()}`, role: 'user', content: messageText }])
+    if (!messageText || chatLoading) return
+
+    const userMsg: Message = {
+      id: `u_${Date.now()}`,
+      role: 'user',
+      content: messageText,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, userMsg])
     setInput('')
-    setLoading(true)
+    setChatLoading(true)
+
     try {
       const res = await fetch('/api/agent/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageText, session_id: sessionId }),
       })
       if (!res.ok) throw new Error('Chat request failed')
       const data: ChatResponse = await res.json()
-      setMessages(prev => [...prev, {
-        id: `a_${Date.now()}`, role: 'assistant', content: data.message,
+
+      const assistantMsg: Message = {
+        id: `a_${Date.now()}`,
+        role: 'assistant',
+        content: data.message,
         products: data.products?.length ? data.products : undefined,
-        recommendations: data.recommendations?.length ? data.recommendations : undefined,
-        cart: data.cart || undefined, approval: data.approval || undefined,
-      }])
-      if (data.approval) setPendingApproval(data.approval)
-    } catch (e: any) {
+        cart: data.cart || undefined,
+        quickActions: data.quick_actions?.length ? data.quick_actions : undefined,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, assistantMsg])
+    } catch {
       setMessages(prev => [...prev, {
-        id: `e_${Date.now()}`, role: 'assistant',
-        content: `⚠️ Error: ${e.message || 'Unknown error'}. The chat service may be temporarily unavailable.`,
+        id: `e_${Date.now()}`,
+        role: 'assistant',
+        content: "Sorry, I couldn't process that right now. Please try again.",
+        timestamp: new Date(),
       }])
-    } finally { setLoading(false) }
+    } finally {
+      setChatLoading(false)
+    }
+  }, [input, chatLoading, sessionId])
+
+  const handleAddToCart = useCallback(async (productId: string) => {
+    setAddingProductId(productId)
+    try {
+      const res = await fetch(`/api/carts/session/${sessionId}/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: productId, quantity: 1 }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        const errorMsg = errorData.detail || errorData.error || 'Failed to add to cart'
+        throw new Error(errorMsg)
+      }
+
+      const cartData = await res.json()
+      setCartCount(cartData.item_count || 0)
+
+      setMessages(prev => [...prev, {
+        id: `a_${Date.now()}`,
+        role: 'assistant',
+        content: `✅ Added to your cart! (${cartData.item_count} item${cartData.item_count !== 1 ? 's' : ''} · ₹${cartData.total.toLocaleString()})`,
+        cart: {
+          cart_id: cartData.id,
+          total: cartData.total,
+          item_count: cartData.item_count,
+          items: cartData.items?.map((i: any) => ({
+            name: i.product_name,
+            quantity: i.quantity,
+            price: i.price_at_time,
+            subtotal: i.subtotal,
+          })),
+        },
+        quickActions: [
+          { label: '🛒 View Cart', message: 'Show my cart' },
+          { label: '🔍 Continue Shopping', message: 'Show me popular products' },
+        ],
+        timestamp: new Date(),
+      }])
+    } catch (err: any) {
+      setMessages(prev => [...prev, {
+        id: `e_${Date.now()}`,
+        role: 'assistant',
+        content: err.message || "Sorry, I couldn't add this product to your cart. Please try again.",
+        timestamp: new Date(),
+      }])
+    } finally {
+      setAddingProductId(null)
+    }
+  }, [sessionId])
+
+  const clearChat = () => {
+    setMessages([WELCOME_MESSAGE])
   }
 
-  const handleAddProduct = async (productId: string, position?: number) => {
-    setLoading(true)
-    try {
-      const msg = productId
-        ? `Add product ${productId} to my cart`
-        : `Add the ${position === 1 ? 'first' : position === 2 ? 'second' : `${position}th`} product to my cart`
-      const res = await fetch('/api/agent/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, session_id: sessionId }),
-      })
-      const data: ChatResponse = await res.json()
-      setMessages(prev => [...prev, {
-        id: `a_${Date.now()}`, role: 'assistant', content: data.message,
-        cart: data.cart || undefined, approval: data.approval || undefined,
-        recommendations: data.recommendations?.length ? data.recommendations : undefined,
-      }])
-      if (data.approval) setPendingApproval(data.approval)
-    } catch (e) {
-      setMessages(prev => [...prev, { id: `e_${Date.now()}`, role: 'assistant', content: 'Failed to add product. Try again.' }])
-    } finally { setLoading(false) }
+  const formatTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+  const isBestseller = (p: Product): boolean => {
+    return (p.sales || 0) >= 50 || (p.rating || 0) >= 4.5
   }
 
-  const handleApprovePayment = async () => {
-    if (!pendingApproval) return
-    setLoading(true)
-    try {
-      await fetch(`/api/approvals/${pendingApproval.approval_id}/approve`, { method: 'POST' })
-      const payRes = await fetch('/api/payments/', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: pendingApproval.order_id }),
-      })
-      const payData = await payRes.json()
-      setMessages(prev => [...prev, {
-        id: `p_${Date.now()}`, role: 'assistant',
-        content: payData.status === 'initiated'
-          ? `✅ Payment initiated!\nOrder: ${payData.order_id}\nRazorpay: ${payData.razorpay_order_id}\nCheck Payments tab for status.`
-          : `❌ Payment failed: ${payData.failure_reason || 'Unknown error'}`,
-        paymentStatus: payData.status,
-      }])
-      setPendingApproval(null)
-    } catch (e: any) {
-      setMessages(prev => [...prev, { id: `e_${Date.now()}`, role: 'assistant', content: `Payment error: ${e.message}` }])
-    } finally { setLoading(false) }
+  const hasDiscount = (p: Product): boolean => {
+    return !!(p.previous_price && p.previous_price > p.price)
+  }
+
+  const getDiscountPercent = (p: Product): number => {
+    if (!p.previous_price || p.previous_price <= p.price) return 0
+    return Math.round(((p.previous_price - p.price) / p.previous_price) * 100)
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Header */}
       <div className="bg-dark-800 border-b border-dark-700 px-6 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-white flex items-center gap-2">
-              <span className="text-purple-400">🛒</span> Commerce Assistant
-            </h1>
-            <p className="text-xs text-dark-400">Online shopping help</p>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-sm font-semibold text-white">Commerce Assistant</h1>
+              <p className="text-[10px] text-dark-400">How can I help you shop today?</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="badge-success">ONLINE</span>
-            <span className="badge-info text-[10px]">Session active</span>
+            {cartCount > 0 && (
+              <a href="/cart" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-dark-200 hover:text-white transition-colors text-xs">
+                🛒 <span className="font-medium">{cartCount}</span>
+              </a>
+            )}
+            <button onClick={clearChat} className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors" title="Clear chat">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-auto p-4 lg:p-6 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-center py-12 max-w-lg mx-auto">
-            <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-4xl">🛒</span>
-            </div>              <h2 className="text-xl font-bold text-white mb-2">Commerce Assistant</h2>
-            <p className="text-dark-400 text-sm mb-6">I can help you find products, compare options, and place orders. Just tell me what you're looking for!</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {SUGGESTIONS.map(s => (
-                <button key={s} onClick={() => handleSend(s)}
-                  className="text-left px-3 py-2.5 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-200 hover:border-primary-500/50 hover:text-white transition-colors">
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
+      <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4">
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-2xl rounded-xl px-4 py-3 ${
-              msg.role === 'user' ? 'bg-primary-600 text-white' : 'bg-dark-800 border border-dark-700 text-dark-100'
+            <div className={`max-w-3xl rounded-xl px-4 py-3 ${
+              msg.role === 'user'
+                ? 'bg-primary-600 text-white'
+                : 'bg-dark-800 border border-dark-700 text-dark-100'
             }`}>
-              <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</div>
+              <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
 
+              {/* Product Cards */}
               {msg.products && msg.products.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {msg.products.map(p => (
-                    <div key={p.product_id} className="flex items-center gap-3 p-3 bg-dark-700/50 rounded-lg border border-dark-600">
-                      <div className="w-10 h-10 bg-primary-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <span className="text-xs font-bold text-primary-400">#{p.position}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-white truncate">{sanitizeProductName(p.name)}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs font-bold text-primary-400">₹{p.price.toLocaleString()}</span>
-                          <span className="text-[10px] text-dark-400">{p.category}</span>
-                          <span className={`text-[10px] px-1 py-0.5 rounded ${p.stock > 10 ? 'bg-emerald-500/10 text-emerald-400' : p.stock > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'}`}>
-                            {p.stock > 0 ? `${p.stock} stock` : 'Out'}
-                          </span>
+                <div className="mt-3 overflow-x-auto">
+                  <div className="flex gap-3 pb-2" style={{ minWidth: 'max-content' }}>
+                    {msg.products.slice(0, 5).map(p => (
+                      <div key={p.product_id} className="w-[220px] flex-shrink-0 bg-dark-700/50 rounded-lg border border-dark-600 overflow-hidden">
+                        {/* Product Image */}
+                        <div className="relative w-full h-[130px] bg-dark-800 overflow-hidden">
+                          <img
+                            src={p.image_url || FALLBACK_IMAGE}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement
+                              target.src = FALLBACK_IMAGE
+                            }}
+                          />
+                          {isBestseller(p) && (
+                            <span className="absolute top-2 left-2 text-[10px] px-2 py-0.5 bg-amber-500/90 text-white rounded font-medium">
+                              🔥 Bestseller
+                            </span>
+                          )}
+                          {hasDiscount(p) && (
+                            <span className="absolute top-2 right-2 text-[10px] px-2 py-0.5 bg-red-500/90 text-white rounded font-medium">
+                              -{getDiscountPercent(p)}%
+                            </span>
+                          )}
+                        </div>
+                        {/* Product Info */}
+                        <div className="p-3">
+                          <p className="text-sm font-medium text-white truncate leading-tight">{sanitizeProductName(p.name)}</p>
+                          {p.brand && (
+                            <p className="text-[11px] text-dark-400 mt-0.5">{p.brand}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-base font-bold text-primary-400">₹{p.price.toLocaleString()}</span>
+                            {hasDiscount(p) && (
+                              <span className="text-[11px] text-dark-500 line-through">₹{p.previous_price!.toLocaleString()}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            {p.rating ? (
+                              <span className="text-[11px] text-amber-400">★ {p.rating}</span>
+                            ) : null}
+                            <span className={`text-[11px] px-1.5 py-0.5 rounded ${
+                              p.stock > 10 ? 'bg-emerald-500/10 text-emerald-400' :
+                              p.stock > 0 ? 'bg-amber-500/10 text-amber-400' :
+                              'bg-red-500/10 text-red-400'
+                            }`}>
+                              {p.stock > 0 ? (p.stock <= 10 ? `Only ${p.stock} left` : 'In Stock') : 'Out of stock'}
+                            </span>
+                          </div>
+                          {/* Action Buttons */}
+                          {p.stock > 0 && (
+                            <div className="mt-3 flex gap-2">
+                              <a
+                                href={`/product?id=${p.product_id}`}
+                                className="flex-1 text-center text-[11px] px-3 py-2 bg-dark-600 hover:bg-dark-500 text-dark-200 rounded-lg transition-colors"
+                              >
+                                View
+                              </a>
+                              <button
+                                onClick={() => handleAddToCart(p.product_id)}
+                                disabled={addingProductId === p.product_id}
+                                className="flex-1 text-[11px] px-3 py-2 bg-primary-600 hover:bg-primary-500 disabled:bg-primary-800 text-white rounded-lg transition-colors"
+                              >
+                                {addingProductId === p.product_id ? 'Adding...' : '+ Add to Cart'}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      {p.stock > 0 && (
-                        <button onClick={() => handleAddProduct(p.product_id, p.position)}
-                          className="btn-primary text-xs px-3 py-1.5 flex-shrink-0">+ Cart</button>
-                      )}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {msg.recommendations && msg.recommendations.length > 0 && (
-                <div className="mt-3 p-3 bg-primary-500/5 border border-primary-500/10 rounded-lg">
-                  <p className="text-xs font-medium text-primary-300 mb-2">💡 Recommended Add-ons</p>
-                  {msg.recommendations.map(r => (
-                    <div key={r.product_id} className="flex items-center justify-between py-1.5">
-                      <div>
-                        <span className="text-sm text-dark-100">{sanitizeProductName(r.name)}</span>
-                        <span className="text-xs text-dark-400 ml-2">₹{r.price.toLocaleString()}</span>
-                        {r.reason && <p className="text-[10px] text-primary-400/80">{r.reason}</p>}
-                      </div>
-                      <button onClick={() => handleAddProduct(r.product_id)} className="text-xs text-primary-400 hover:text-primary-300 font-medium">+ Add</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
+              {/* Cart Info */}
               {msg.cart && (
-                <div className="mt-3 p-3 bg-dark-700/50 rounded-lg border border-dark-600">
+                <div className="mt-3 p-4 bg-dark-700/50 rounded-lg border border-dark-600">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-white">🛒 Cart</span>
-                    <span className="text-lg font-bold text-primary-400">₹{msg.cart.total.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-primary-400">₹{msg.cart.total.toLocaleString()}</span>
                   </div>
-                  <p className="text-xs text-dark-400">{msg.cart.item_count} items</p>
-                  <a href="/cart" className="btn-primary w-full mt-2 text-xs py-2 block text-center">View Cart & Checkout →</a>
+                  <p className="text-xs text-dark-400 mb-2">{msg.cart.item_count} item(s)</p>
+                  {msg.cart.items && msg.cart.items.length > 0 && (
+                    <div className="space-y-1 mb-3">
+                      {msg.cart.items.map((item, i) => (
+                        <div key={i} className="flex justify-between text-xs text-dark-300">
+                          <span className="truncate mr-2">{item.name} × {item.quantity}</span>
+                          <span className="flex-shrink-0">₹{item.subtotal.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <a href="/cart" className="block text-center text-xs px-3 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg transition-colors">
+                    View Cart & Checkout →
+                  </a>
                 </div>
               )}
 
-              {msg.approval && (
-                <div className="mt-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-                  <p className="text-sm font-medium text-amber-300 mb-1">⚠️ Approval Required</p>
-                  <p className="text-xs text-dark-300 mb-3">Total: ₹{msg.approval.total.toLocaleString()}</p>
-                  <div className="flex gap-2">
-                    <button onClick={handleApprovePayment} className="btn-success flex-1 text-xs py-2">✓ Approve</button>
-                    <button onClick={() => setPendingApproval(null)} className="btn-secondary flex-1 text-xs py-2">Cancel</button>
-                  </div>
+              {/* Quick Actions */}
+              {msg.quickActions && msg.quickActions.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {msg.quickActions.map((qa, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleSend(qa.message)}
+                      className="text-xs px-3 py-2 bg-dark-700 hover:bg-dark-600 border border-dark-600 hover:border-primary-500/50 text-dark-200 hover:text-white rounded-lg transition-colors"
+                    >
+                      {qa.label}
+                    </button>
+                  ))}
                 </div>
               )}
 
-              {msg.paymentStatus && (
-                <div className={`mt-3 p-2 rounded text-sm ${msg.paymentStatus === 'initiated' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                  {msg.paymentStatus === 'initiated' ? '✅ Payment Processing' : '❌ Payment Failed'}
-                </div>
-              )}
+              <div className="text-[10px] text-dark-500 mt-2 text-right">{formatTime(msg.timestamp)}</div>
             </div>
           </div>
         ))}
 
-        {loading && (
+        {chatLoading && (
           <div className="flex justify-start">
             <div className="bg-dark-800 border border-dark-700 rounded-xl px-4 py-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-dark-400">Thinking</span>
                 <div className="flex gap-1">
                   {[0, 1, 2].map(i => (
-                    <div key={i} className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.1}s` }}></div>
+                    <div key={i} className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.1}s` }} />
                   ))}
                 </div>
               </div>
@@ -273,14 +404,25 @@ export default function BuyerPage() {
       {/* Input */}
       <div className="border-t border-dark-700 bg-dark-800 p-4 flex-shrink-0">
         <div className="flex gap-2 max-w-3xl mx-auto">
-          <input type="text" value={input} onChange={e => setInput(e.target.value)}
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Ask about products, inventory, pricing, or start shopping..."
-            className="input flex-1" disabled={loading} />
-          <button onClick={() => handleSend()} disabled={loading || !input.trim()}
-            className="btn-primary px-6">{loading ? '...' : 'Send'}</button>
+            placeholder="Ask about products, prices, orders or your cart..."
+            className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-dark-100 placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+            disabled={chatLoading}
+          />
+          <button
+            onClick={() => handleSend()}
+            disabled={chatLoading || !input.trim()}
+            className="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 disabled:bg-dark-600 disabled:text-dark-400 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            {chatLoading ? '...' : 'Send'}
+          </button>
         </div>
-        <p className="text-[10px] text-dark-500 text-center mt-2">Commerce Assistant · Online Shopping Help</p>
+        <p className="text-[10px] text-dark-500 text-center mt-2">Commerce Assistant · No AI API required</p>
       </div>
     </div>
   )

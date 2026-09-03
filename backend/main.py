@@ -47,7 +47,20 @@ async def lifespan(app: FastAPI):
             else:
                 # Database already has products - NEVER reseed
                 logger.info(f"Found {count} products in database - skipping seed (preserving existing data)")
-                
+
+            # One-time migration: remove grocery products
+            grocery_check = await db.execute(
+                text("SELECT COUNT(*) FROM products WHERE category LIKE '%Grocer%' OR category LIKE '%grocer%'")
+            )
+            grocery_count = grocery_check.scalar() or 0
+            if grocery_count > 0:
+                logger.info(f"Found {grocery_count} grocery products - removing")
+                try:
+                    from scripts.remove_groceries import remove_groceries
+                    await remove_groceries()
+                except Exception as ge:
+                    logger.error(f"Grocery cleanup failed: {ge}")
+    
     except Exception as e:
         logger.error(f"Startup check failed: {e}")
         import traceback

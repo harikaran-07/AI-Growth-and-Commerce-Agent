@@ -1,13 +1,25 @@
 """
 Migration: Fix product image URLs to be product-specific.
 Updates all products that still use the old generic brand+subcategory placeholder.
+Uses product ID hash to guarantee uniqueness even for variant products.
 """
 import asyncio
 import logging
 import re
+import hashlib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _product_color(product_id: str) -> str:
+    """Generate a consistent dark color from product ID for visual variety."""
+    h = hashlib.md5(product_id.encode()).hexdigest()[:6]
+    # Keep it dark (low RGB values) so white text is readable
+    r = min(int(h[0:2], 16) // 3, 40)
+    g = min(int(h[2:4], 16) // 3, 40)
+    b = min(int(h[4:6], 16) // 3, 60)
+    return f"{r:02x}{g:02x}{b:02x}"
 
 
 async def fix_images():
@@ -22,38 +34,31 @@ async def fix_images():
         updated = 0
         skipped = 0
         for p in products:
-            # Check if using old generic placeholder (brand+subcategory pattern)
-            if p.image_url and 'placehold.co' in p.image_url:
-                # Extract the current text from the URL
+            needs_update = False
+
+            if not p.image_url:
+                needs_update = True
+            elif 'placehold.co' in p.image_url:
                 text_match = re.search(r'text=([^&]+)', p.image_url)
                 if text_match:
                     current_text = text_match.group(1)
-                    # Old format: "Brand+Subcategory" (2 parts max)
                     parts = current_text.split('+')
-                    if len(parts) <= 2 and p.name:
-                        # Update to use product name (truncated to 20 chars)
-                        new_text = p.name[:20].replace(' ', '+')
-                        new_url = f"https://placehold.co/400x300/1e1b4b/ffffff?text={new_text}"
-                        p.image_url = new_url
-                        updated += 1
-                    else:
-                        skipped += 1
-                else:
-                    skipped += 1
-            elif not p.image_url:
-                # No image at all - generate one from product name
-                if p.name:
-                    new_text = p.name[:20].replace(' ', '+')
-                    p.image_url = f"https://placehold.co/400x300/1e1b4b/ffffff?text={new_text}"
-                    updated += 1
-                else:
-                    skipped += 1
+                    # Old format had <=2 parts (Brand+Subcategory)
+                    if len(parts) <= 2:
+                        needs_update = True
+
+            if needs_update and p.name:
+                # Use product name + first 8 chars of ID for guaranteed uniqueness
+                name_text = p.name[:16].replace(' ', '+')
+                id_suffix = p.id[:8]
+                color = _product_color(p.id)
+                p.image_url = f"https://placehold.co/400x300/{color}/ffffff?text={name_text}+{id_suffix}"
+                updated += 1
             else:
-                # Has a custom image URL - keep it
                 skipped += 1
 
         await db.commit()
-        logger.info(f"Image migration complete: {updated} updated, {skipped} skipped (already correct or custom)")
+        logger.info(f"Image migration complete: {updated} updated, {skipped} skipped")
 
 
 if __name__ == "__main__":

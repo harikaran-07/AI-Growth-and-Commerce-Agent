@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react'
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: '📊', color: 'text-blue-400' },
-  { href: '/buyer', label: 'Commerce Assistant', icon: '🛒', color: 'text-purple-400' },
   { href: '/products', label: 'Products', icon: '📦', color: 'text-cyan-400' },
   { href: '/cart', label: 'Cart', icon: '🛒', color: 'text-amber-400' },
   { href: '/orders', label: 'Orders', icon: '📋', color: 'text-emerald-400' },

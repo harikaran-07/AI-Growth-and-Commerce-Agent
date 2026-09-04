@@ -108,6 +108,12 @@ async def execute_tool(
             return await _get_sales_recommendations(db, session_id)
         elif tool_name == "get_bestsellers":
             return await _get_bestsellers(arguments, db, session_id, session_data)
+        elif tool_name == "update_cart_quantity":
+            return await _update_cart_quantity(arguments, db, session_id, session_data)
+        elif tool_name == "remove_cart_item":
+            return await _remove_cart_item(arguments, db, session_id, session_data)
+        elif tool_name == "clear_cart":
+            return await _clear_cart(arguments, db, session_id, session_data)
         else:
             return json.dumps({"error": f"Unknown tool: {tool_name}"})
     except Exception as e:
@@ -147,6 +153,19 @@ async def _search_products(arguments: Dict, db: AsyncSession, session_id: str, s
         )
         query = query.where(search_filter)
 
+    # Optional deterministic ordering: cheapest first, best rated, or most sold.
+    sort_by = arguments.get("sort")
+    if sort_by == "price_asc":
+        query = query.order_by(Product.price.asc(), Product.id.asc())
+    elif sort_by == "rating_desc":
+        query = query.order_by(Product.rating.desc(), Product.id.asc())
+    elif sort_by == "sales_desc":
+        query = query.order_by(Product.sales.desc(), Product.id.asc())
+    elif sort_by == "price_desc":
+        query = query.order_by(Product.price.desc(), Product.id.asc())
+    else:
+        query = query.order_by(Product.id.asc())
+
     result = await db.execute(query.limit(10))
     products = result.scalars().all()
 
@@ -170,6 +189,13 @@ async def _search_products(arguments: Dict, db: AsyncSession, session_id: str, s
         })
 
     session_data["last_search_results"] = products_list
+    session_data["last_search_query"] = {
+        "query": search_text,
+        "category": category,
+        "max_price": max_price,
+        "min_price": min_price,
+        "sort": sort_by or "default",
+    }
 
     await log_audit_event(
         db, session_id, "PRODUCT_SEARCH",
@@ -179,10 +205,25 @@ async def _search_products(arguments: Dict, db: AsyncSession, session_id: str, s
         final_status="search_completed"
     )
 
+    if products_list:
+        message = f"Found {len(products_list)} product(s)" + (f" in category '{category}'" if category else "") + (f" under ₹{max_price:,.0f}" if max_price else "")
+        if sort_by == "price_asc":
+            message += " — sorted by price, cheapest first."
+        elif sort_by == "rating_desc":
+            message += " — sorted by customer rating."
+        elif sort_by == "sales_desc":
+            message += " — sorted by units sold."
+    else:
+        message = (
+            "Sorry, I couldn't find any matching products. "
+            "Try different keywords, ask for a category (e.g. \"laptops\" or \"headphones\"), "
+            "or say \"show me best sellers\"."
+        )
+
     return json.dumps({
         "products": products_list,
         "count": len(products_list),
-        "message": f"Found {len(products_list)} product(s)" + (f" in category '{category}'" if category else "") + (f" under ₹{max_price}" if max_price else "")
+        "message": message
     })
 
 
@@ -525,6 +566,10 @@ async def _add_to_cart(arguments: Dict, db: AsyncSession, session_id: str, sessi
     cart.total = sum(i.price_at_time * i.quantity for i in items)
 
     await db.commit()
+
+    # Remember which product was just added so follow-ups like "make it two"
+    # or "add one more" can target it without repeating the product name.
+    session_data["last_added_product_id"] = product_id
 
     await log_audit_event(
         db, session_id, "CART_ITEM_ADDED",
@@ -1137,6 +1182,204 @@ async def _get_sales_recommendations(db: AsyncSession, session_id: str) -> str:
     )
 
     return json.dumps({"recommendations": recommendations, "count": len(recommendations)})
+
+
+async def _load_cart_rows(db: AsyncSession, session_id: str, session_data: Dict):
+    """Return (cart, rows) for the session's active cart, or (None, [])."""
+    cart_id = session_data.get("cart_id")
+    cart = None
+    if cart_id:
+        cart_result = await db.execute(
+            select(Cart).where(Cart.id == cart_id, Cart.status == "active")
+        )
+        cart = cart_result.scalar_one_or_none()
+    if not cart:
+        cart_result = await db.execute(
+            select(Cart).where(Cart.session_id == session_id, Cart.status == "active")
+        )
+        cart = cart_result.scalar_one_or_none()
+    if not cart:
+        return None, []
+
+    rows_result = await db.execute(
+        select(CartItem, Product)
+        .join(Product, CartItem.product_id == Product.id)
+        .where(CartItem.cart_id == cart.id)
+        .order_by(CartItem.id.asc())
+    )
+    return cart, rows_result.all()
+
+
+def _cart_payload(cart, rows):
+    """Build the standard cart JSON payload used across chat tools."""
+    items = []
+    for ci, p in rows:
+        items.append({
+            "product_id": ci.product_id,
+            "name": p.name,
+            "price": p.price,
+            "quantity": ci.quantity,
+            "subtotal": ci.price_at_time * ci.quantity,
+            "image_url": p.image_url or "",
+        })
+    total = sum(i["subtotal"] for i in items)
+    return {
+        "cart_id": cart.id,
+        "items": items,
+        "total": total,
+        "item_count": sum(i["quantity"] for i in items),
+    }
+
+
+async def _resolve_cart_item_product(arguments: Dict, session_data: Dict, rows):
+    """
+    Resolve which cart item a follow-up refers to.
+    Priority: explicit product_id → position in the cart list → the product most
+    recently added by the chat → None.
+    Returns the matching (CartItem, Product) or (None, None).
+    """
+    if not rows:
+        return None, None
+
+    product_id = arguments.get("product_id")
+    if product_id:
+        for ci, p in rows:
+            if ci.product_id == product_id:
+                return ci, p
+        return None, None
+
+    position = arguments.get("product_position")
+    if position == "last":
+        position = len(rows)
+    if isinstance(position, int) and 1 <= position <= len(rows):
+        return rows[position - 1]
+
+    last_added = session_data.get("last_added_product_id")
+    if last_added:
+        for ci, p in rows:
+            if ci.product_id == last_added:
+                return ci, p
+
+    # Name lookup: e.g. "remove the headphones from my cart"
+    name_hint = arguments.get("product_name", "")
+    if name_hint:
+        hint = name_hint.lower()
+        for ci, p in rows:
+            if hint in (p.name or "").lower():
+                return ci, p
+
+    return None, None
+
+
+async def _update_cart_quantity(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:
+    """Set the quantity of a cart item (resolved from chat context)."""
+    quantity = arguments.get("quantity")
+    if not isinstance(quantity, int) or quantity < 1:
+        return json.dumps({"error": "Quantity must be a positive whole number."})
+    if quantity > 100:
+        return json.dumps({"error": "Maximum quantity is 100."})
+
+    cart, rows = await _load_cart_rows(db, session_id, session_data)
+    if not cart or not rows:
+        return json.dumps({
+            "error": "Your cart is empty, so there is nothing to update. Add a product first (e.g. \"add the first one to cart\")."
+        })
+
+    ci, p = await _resolve_cart_item_product(arguments, session_data, rows)
+    if not ci:
+        return json.dumps({
+            "error": "I couldn't tell which cart item to update. You can say \"make the first item 2\" or tell me the product name."
+        })
+
+    if quantity > p.stock:
+        return json.dumps({"error": f"Only {p.stock} units of {p.name} are in stock."})
+
+    ci.quantity = quantity
+    ci.price_at_time = p.price
+    await db.commit()
+
+    cart, rows = await _load_cart_rows(db, session_id, session_data)
+    payload = _cart_payload(cart, rows)
+
+    await log_audit_event(
+        db, session_id, "CART_ITEM_UPDATED",
+        tool_called="update_cart_quantity",
+        input_data=json.dumps({"product_id": p.id, "quantity": quantity}),
+        decision=f"Set {p.name} quantity to {quantity}",
+        final_status="cart_updated"
+    )
+
+    return json.dumps({
+        "success": True,
+        "cart": payload,
+        "message": f"Done — {p.name} quantity is now {quantity} in your cart.",
+    })
+
+
+async def _remove_cart_item(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:
+    """Remove an item from the cart (resolved from chat context or name)."""
+    cart, rows = await _load_cart_rows(db, session_id, session_data)
+    if not cart or not rows:
+        return json.dumps({
+            "error": "Your cart is empty, so there is nothing to remove."
+        })
+
+    ci, p = await _resolve_cart_item_product(arguments, session_data, rows)
+    if not ci:
+        names = " • ".join(f"{i[1].name}" for i in rows)
+        return json.dumps({
+            "error": f"I couldn't tell which item to remove. Your cart has: {names}. Try \"remove the last item\" or name the product."
+        })
+
+    removed = (ci, p)
+    await db.delete(ci)
+    await db.commit()
+
+    cart, rows = await _load_cart_rows(db, session_id, session_data)
+    payload = _cart_payload(cart, rows) if cart else None
+
+    await log_audit_event(
+        db, session_id, "CART_ITEM_REMOVED",
+        tool_called="remove_cart_item",
+        input_data=json.dumps({"product_id": removed[1].id}),
+        decision=f"Removed {removed[1].name} from cart",
+        final_status="cart_updated"
+    )
+
+    return json.dumps({
+        "success": True,
+        "cart": payload,
+        "message": f"Removed {removed[1].name} from your cart.",
+    })
+
+
+async def _clear_cart(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:
+    """Remove every item from the session cart."""
+    cart, rows = await _load_cart_rows(db, session_id, session_data)
+    if not cart or not rows:
+        return json.dumps({"error": "Your cart is already empty."})
+
+    count = sum(i.quantity for _, i in rows)
+    for ci, _ in rows:
+        await db.delete(ci)
+    cart.total = 0
+    await db.commit()
+
+    payload = _cart_payload(cart, [])
+
+    await log_audit_event(
+        db, session_id, "CART_CLEARED",
+        tool_called="clear_cart",
+        input_data=json.dumps({"items_removed": len(rows)}),
+        decision=f"Cleared {count} item(s) from cart",
+        final_status="cart_cleared"
+    )
+
+    return json.dumps({
+        "success": True,
+        "cart": payload,
+        "message": "Your cart has been cleared.",
+    })
 
 
 async def _get_bestsellers(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:

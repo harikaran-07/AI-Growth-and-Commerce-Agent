@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import get_db
-from services.ai_provider import detect_intent, generate_response, get_tool_definitions, QUICK_ACTIONS
+from services.ai_provider import detect_intent, generate_response, get_tool_definitions, resolve_followup_text, QUICK_ACTIONS
 from services.agent_tools import execute_tool, get_session_data
 from models.models import Product, ProductRelationship
 from pydantic import BaseModel
@@ -60,10 +60,18 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             quick_actions=QUICK_ACTIONS,
         )
 
-    intent_result = detect_intent(text)
+    # Keep the raw message available for knowledge lookups, and resolve
+    # short follow-ups ("under 3000", "wireless", "which is better?") against
+    # the previous turn before intent detection.
+    session_data["current_message"] = request.message
+    effective_text = resolve_followup_text(request.message, session_data)
+    if effective_text != request.message:
+        logger.info(f"[CHAT] Follow-up resolved: {request.message!r} -> {effective_text!r}")
+
+    intent_result = detect_intent(effective_text)
     intent = intent_result["intent"]
     entities = intent_result["entities"]
-    logger.info(f"[CHAT] Intent: {intent} | Entities: {entities}")
+    logger.info(f"[CHAT] Intent: {intent} | Entities: {entities} | effective: {effective_text!r}")
 
     # Generate response text and tool calls
     response = await generate_response(intent_result, None, db=db, session_id=session_id)

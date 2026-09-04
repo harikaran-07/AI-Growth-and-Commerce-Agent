@@ -73,14 +73,14 @@ interface ChatResponse {
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: "Hi! I'm your Commerce Assistant. I can help you find products, compare prices, check availability, and manage your cart.",
+  content: "Hi! I'm your **Commerce Assistant** 👋 I can find & compare real products, recommend accessories, manage your shared cart, and guide you through Razorpay TEST MODE checkout — or just answer questions. Try one of these, or ask me anything in plain language.",
   quickActions: [
-    { label: '🔥 Best Sellers', message: 'Show me best sellers' },
-    { label: '🔍 Find Products', message: 'Show me popular products' },
-    { label: '🏷️ Deals', message: 'Show me deals and discounts' },
-    { label: '🛒 Show Cart', message: 'Show my cart' },
-    { label: '📦 Track Order', message: 'Track my order' },
-    { label: '❓ Help', message: 'Help' },
+    { label: '🔍 Find products', message: 'Show me laptops under 60000' },
+    { label: '🔥 Best sellers', message: 'Show me best sellers' },
+    { label: '🛒 My cart', message: "What's in my cart?" },
+    { label: '💳 How to pay?', message: 'How can I pay?' },
+    { label: '📦 Track order', message: 'Where is my order?' },
+    { label: '❓ Help', message: 'What can you do?' },
   ],
   timestamp: new Date(),
 }

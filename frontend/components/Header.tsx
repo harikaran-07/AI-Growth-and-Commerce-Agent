@@ -44,11 +44,14 @@ export default function Header() {
   return (
     <header className="bg-dark-900 border-b border-dark-700 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 lg:px-6">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+        {/* pl-12 (below lg) clears the fixed hamburger button so the two never overlap.
+            Branding shows here only below lg — on lg+ the sidebar is visible and is the
+            single application branding instance. */}
+        <div className="flex items-center justify-between h-16 pl-12 lg:pl-0">
+          {/* Logo (mobile/tablet only) */}
+          <Link href="/" aria-label="AI Growth & Commerce Agent - Home" className="flex items-center gap-2.5 flex-shrink-0 lg:hidden">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">M</span>
+              <span className="text-white font-bold text-sm">A</span>
             </div>
             <div className="hidden sm:block">
               <h1 className="text-sm font-bold text-white leading-tight">AI Growth</h1>

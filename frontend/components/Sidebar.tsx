@@ -41,7 +41,7 @@ export default function Sidebar() {
       <div className="p-4 border-b border-dark-700">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-            <span className="text-white font-bold text-lg">M</span>
+            <span className="text-white font-bold text-lg">A</span>
           </div>
           <div>
             <h1 className="text-lg font-bold text-white leading-tight">AI Growth</h1>
@@ -94,7 +94,7 @@ export default function Sidebar() {
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="lg:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-dark-800 border border-dark-600 text-dark-200"
+        className="lg:hidden fixed top-3 left-3 z-[60] p-2 rounded-lg bg-dark-800 border border-dark-600 text-dark-200"
         aria-label="Toggle navigation"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

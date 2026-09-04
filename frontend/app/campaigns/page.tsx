@@ -322,7 +322,7 @@ export default function CampaignsPage() {
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-sm font-semibold text-white">{c.name}</span>
                     {statusChip(c)}
-                    {c.label === 'synthetic' && (
+                    {(c.label || '').toLowerCase().includes('synthetic') && (
                       <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30">
                         Synthetic Demo Result
                       </span>

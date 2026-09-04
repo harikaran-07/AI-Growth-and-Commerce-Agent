@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.models import (
     Product, ProductRelationship, Cart, CartItem,
-    Order, OrderItem, Policy, Approval, AuditLog, Customer
+    Order, OrderItem, Policy, Approval, AuditLog, Customer, Payment
 )
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,8 @@ async def execute_tool(
             return await _recommend_cross_sell(arguments, db)
         elif tool_name == "add_to_cart":
             return await _add_to_cart(arguments, db, session_id, session_data)
+        elif tool_name == "create_checkout":
+            return await _create_checkout(arguments, db, session_id, session_data)
         elif tool_name == "get_cart":
             return await _get_cart(db, session_id, session_data)
         elif tool_name == "calculate_cart_total":
@@ -288,7 +290,13 @@ async def _add_to_cart(arguments: Dict, db: AsyncSession, session_id: str, sessi
 
     if not product_id and product_position:
         last_results = session_data.get("last_search_results", [])
-        if product_position < 1 or product_position > len(last_results):
+        if not last_results:
+            return json.dumps({
+                "error": "I don't have any previous search results to reference. Please search for products first, e.g. \"Show me smartphones under 50000\"."
+            })
+        if product_position == "last":
+            product_position = len(last_results)
+        if not isinstance(product_position, int) or product_position < 1 or product_position > len(last_results):
             return json.dumps({
                 "error": f"Invalid position {product_position}. Only {len(last_results)} products in last search.",
                 "available_positions": list(range(1, len(last_results) + 1))
@@ -377,6 +385,174 @@ async def _add_to_cart(arguments: Dict, db: AsyncSession, session_id: str, sessi
             "item_count": sum(i.quantity for i in items)
         },
         "message": f"Added {product.name} x{quantity} to cart"
+    })
+
+
+async def _create_checkout(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:
+    """
+    Create an order from the real session cart and initiate a Razorpay TEST MODE order.
+    All prices/totals are calculated server-side from trusted database values.
+    """
+    # Find the active cart for this session
+    cart = None
+    cart_id = session_data.get("cart_id")
+    if cart_id:
+        cart_result = await db.execute(
+            select(Cart).where(Cart.id == cart_id, Cart.status == "active")
+        )
+        cart = cart_result.scalar_one_or_none()
+    if not cart:
+        cart_result = await db.execute(
+            select(Cart).where(Cart.session_id == session_id, Cart.status == "active")
+        )
+        cart = cart_result.scalar_one_or_none()
+    if not cart:
+        return json.dumps({"error": "Your cart is empty. Add products to your cart before checking out."})
+
+    # Load cart items joined with products
+    items_result = await db.execute(
+        select(CartItem, Product).join(Product, CartItem.product_id == Product.id).where(CartItem.cart_id == cart.id)
+    )
+    rows = items_result.all()
+    if not rows:
+        return json.dumps({"error": "Your cart is empty. Add products to your cart before checking out."})
+
+    # Validate stock and compute totals SERVER-SIDE (never trust client prices)
+    subtotal = 0.0
+    order_items = []
+    for ci, p in rows:
+        if p.stock < ci.quantity:
+            return json.dumps({
+                "error": f"Insufficient stock for {p.name}. Only {p.stock} available."
+            })
+        item_subtotal = round(p.price * ci.quantity, 2)
+        subtotal += item_subtotal
+        order_items.append({
+            "product_id": p.id,
+            "product_name": p.name,
+            "quantity": ci.quantity,
+            "price": p.price,
+            "subtotal": item_subtotal,
+        })
+
+    if subtotal <= 0:
+        return json.dumps({"error": "Order total must be greater than zero."})
+
+    # Server-side totals: discount (none), 18% GST, free shipping over ₹500
+    discount = 0.0
+    taxable = subtotal
+    tax = round(taxable * 0.18, 2)
+    shipping = 0.0 if subtotal >= 500 else 49.0
+    total = round(taxable + tax + shipping, 2)
+
+    # Create order
+    customer_name = (arguments.get("customer_name") or "Guest Customer").strip()
+    customer_email = (arguments.get("customer_email") or "guest@demo.com").strip().lower()
+    order = Order(
+        cart_id=cart.id,
+        customer_name=customer_name,
+        customer_email=customer_email,
+        subtotal=subtotal,
+        discount=discount,
+        tax=tax,
+        shipping=shipping,
+        total=total,
+        status="pending",
+        payment_status="pending",
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    # Create order items
+    for item_data in order_items:
+        db.add(OrderItem(
+            order_id=order.id,
+            product_id=item_data["product_id"],
+            product_name=item_data["product_name"],
+            quantity=item_data["quantity"],
+            price=item_data["price"],
+            subtotal=item_data["subtotal"],
+        ))
+    await db.commit()
+
+    # Mark cart as completed
+    cart.status = "completed"
+    await db.commit()
+
+    session_data["last_order_id"] = order.id
+
+    await log_audit_event(
+        db, session_id, "ORDER_CREATED",
+        tool_called="create_checkout",
+        input_data=json.dumps({"cart_id": cart.id, "total": total}),
+        decision=f"Order {order.id[:8]} created, total ₹{total}",
+        final_status="pending"
+    )
+
+    # Create Razorpay TEST MODE order (mirrors /api/payments/create-order)
+    from routes.payments import get_razorpay_client, RAZORPAY_KEY_ID
+    client = get_razorpay_client()
+    if client:
+        try:
+            rzp_order = client.order.create({
+                "amount": int(total * 100),  # paise
+                "currency": "INR",
+                "receipt": str(order.id),
+            })
+            razorpay_order_id = rzp_order["id"]
+        except Exception as e:
+            logger.error(f"Razorpay order creation failed: {e}")
+            razorpay_order_id = f"order_demo_{uuid.uuid4().hex[:12]}"
+    else:
+        razorpay_order_id = f"order_demo_{uuid.uuid4().hex[:12]}"
+
+    payment = Payment(
+        order_id=order.id,
+        amount=total,
+        currency="INR",
+        status="initiated",
+        razorpay_order_id=razorpay_order_id,
+    )
+    db.add(payment)
+
+    order.status = "payment_initiated"
+    order.payment_status = "processing"
+    order.razorpay_order_id = razorpay_order_id
+    await db.commit()
+    await db.refresh(payment)
+
+    await log_audit_event(
+        db, session_id, "PAYMENT_INITIATED",
+        tool_called="create_checkout",
+        input_data=json.dumps({"order_id": order.id, "amount": total}),
+        decision=f"Razorpay order {razorpay_order_id} created for ₹{total}",
+        payment_reference=razorpay_order_id,
+        final_status="initiated"
+    )
+
+    key_id = RAZORPAY_KEY_ID if RAZORPAY_KEY_ID and "placeholder" not in RAZORPAY_KEY_ID.lower() else ""
+
+    return json.dumps({
+        "success": True,
+        "order_id": order.id,
+        "payment_id": payment.id,
+        "razorpay_order_id": razorpay_order_id,
+        "amount": int(total * 100),
+        "currency": "INR",
+        "key_id": key_id,
+        "subtotal": subtotal,
+        "discount": discount,
+        "tax": tax,
+        "shipping": shipping,
+        "total": total,
+        "items": order_items,
+        "message": (
+            f"Order {order.id[:8].upper()} is ready.\n\n"
+            + "\n".join(f"• {i['product_name']} x{i['quantity']} — ₹{i['subtotal']:,.0f}" for i in order_items)
+            + f"\n\nSubtotal: ₹{subtotal:,.0f}\nTax (18%): ₹{tax:,.0f}\nShipping: {'Free' if shipping == 0 else f'₹{shipping:,.0f}'}\nTotal: ₹{total:,.0f}\n\n"
+            + "Click 'Pay with Razorpay' below to complete payment (TEST MODE — no real money charged)."
+        )
     })
 
 

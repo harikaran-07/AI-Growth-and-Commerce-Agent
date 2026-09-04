@@ -48,6 +48,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     products_found = []
     recommendations = []
     cart_info = None
+    payment = None
 
     # Detect intent from user message
     text = request.message.strip()
@@ -78,15 +79,45 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             result_data = json.loads(result_str)
             all_tool_calls_used.append({"tool": tool_name, "arguments": tool_args})
 
+            # Surface tool errors as a helpful message (never a stack trace)
+            if "error" in result_data:
+                if not response_text:
+                    response_text = result_data["error"]
+                continue
+
             # Extract data from tool results
             if tool_name in ("search_products", "get_bestsellers") and "products" in result_data:
                 products_found = result_data["products"]
+            if result_data.get("cart") and cart_info is None:
+                cart_info = result_data["cart"]
+            if tool_name in ("recommend_cross_sell", "recommend_upsell") and "recommendations" in result_data:
+                recommendations = result_data["recommendations"]
+            if not response_text and result_data.get("message"):
+                response_text = result_data["message"]
+
+            if tool_name == "create_checkout" and result_data.get("razorpay_order_id"):
+                payment_info = {
+                    "order_id": result_data.get("order_id"),
+                    "payment_id": result_data.get("payment_id"),
+                    "razorpay_order_id": result_data.get("razorpay_order_id"),
+                    "amount": result_data.get("amount"),
+                    "currency": result_data.get("currency"),
+                    "key_id": result_data.get("key_id", ""),
+                    "subtotal": result_data.get("subtotal"),
+                    "discount": result_data.get("discount"),
+                    "tax": result_data.get("tax"),
+                    "shipping": result_data.get("shipping"),
+                    "total": result_data.get("total"),
+                    "items": result_data.get("items", []),
+                }
+                payment = payment_info
+                cart_info = {
+                    "cart_id": session_data.get("cart_id", ""),
+                    "total": result_data.get("total"),
+                    "item_count": sum(i.get("quantity", 0) for i in result_data.get("items", [])),
+                }
                 if not response_text and result_data.get("message"):
                     response_text = result_data["message"]
-            elif tool_name == "get_cart" and "cart" in result_data:
-                cart_info = result_data["cart"]
-            elif tool_name in ("recommend_cross_sell", "recommend_upsell") and "recommendations" in result_data:
-                recommendations = result_data["recommendations"]
         except Exception as e:
             logger.error(f"[CHAT] Tool {tool_name} failed: {e}")
 
@@ -115,7 +146,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         recommendations=recommendations,
         cart=cart_info,
         approval=None,
-        payment=None,
+        payment=payment,
         tool_calls=all_tool_calls_used,
         quick_actions=response.get("quick_actions") or [],
     )

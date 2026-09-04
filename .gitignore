@@ -15,10 +15,10 @@ __pycache__/
 # build output
 .next/
 frontend/.next/
-frontend/out/
 dist/
 build/
 coverage/
+# frontend/out/ is committed for Render deployment
 
 # OS/editor
 .DS_Store

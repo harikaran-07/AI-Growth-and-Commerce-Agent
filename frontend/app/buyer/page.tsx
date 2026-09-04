@@ -3,12 +3,28 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { sanitizeProductName } from '../utils'
 
+interface PaymentInfo {
+  order_id: string
+  payment_id: string
+  razorpay_order_id: string
+  amount: number
+  currency: string
+  key_id?: string
+  subtotal: number
+  discount: number
+  tax: number
+  shipping: number
+  total: number
+  items?: { product_id: string; product_name: string; quantity: number; price: number; subtotal: number }[]
+}
+
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   products?: Product[]
   cart?: CartInfo
+  payment?: PaymentInfo
   quickActions?: QuickAction[]
   timestamp: Date
 }
@@ -48,6 +64,7 @@ interface ChatResponse {
   message: string
   products: Product[]
   cart: CartInfo | null
+  payment: PaymentInfo | null
   quick_actions: QuickAction[]
 }
 
@@ -76,6 +93,7 @@ export default function BuyerPage() {
   const [chatLoading, setChatLoading] = useState(false)
   const [cartCount, setCartCount] = useState(0)
   const [addingProductId, setAddingProductId] = useState<string | null>(null)
+  const [payingOrder, setPayingOrder] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -135,6 +153,7 @@ export default function BuyerPage() {
         content: data.message,
         products: data.products?.length ? data.products : undefined,
         cart: data.cart || undefined,
+        payment: data.payment || undefined,
         quickActions: data.quick_actions?.length ? data.quick_actions : undefined,
         timestamp: new Date(),
       }
@@ -201,6 +220,104 @@ export default function BuyerPage() {
       setAddingProductId(null)
     }
   }, [sessionId])
+
+  const payWithRazorpay = useCallback(async (msg: Message) => {
+    const payment = msg.payment
+    if (!payment) return
+    setPayingOrder(payment.order_id)
+
+    const paymentFailed = (text: string) => {
+      setMessages(prev => [...prev, {
+        id: `payf_${Date.now()}`,
+        role: 'assistant',
+        content: text,
+        timestamp: new Date(),
+      }])
+    }
+    const paymentSuccess = () => {
+      setMessages(prev => [...prev, {
+        id: `pays_${Date.now()}`,
+        role: 'assistant',
+        content: `✅ Payment successful! Order #${payment.order_id.slice(0, 8).toUpperCase()} has been paid (₹${payment.total.toLocaleString()}). Thank you for shopping with us!`,
+        timestamp: new Date(),
+      }])
+      fetchCartCount()
+    }
+
+    try {
+      if (payment.key_id) {
+        // Real Razorpay TEST MODE checkout
+        const options = {
+          key: payment.key_id,
+          amount: payment.amount,
+          currency: payment.currency,
+          name: 'AI Growth & Commerce',
+          description: `Order #${payment.order_id.slice(0, 8)}`,
+          order_id: payment.razorpay_order_id,
+          handler: async (response: any) => {
+            try {
+              const verifyRes = await fetch('/api/payments/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  order_id: payment.order_id,
+                }),
+              })
+              const verifyData = await verifyRes.json()
+              if (verifyRes.ok) {
+                paymentSuccess()
+              } else {
+                paymentFailed(`❌ Payment was not completed. Your order has NOT been marked as paid. ${verifyData?.detail || 'Please try again.'}`)
+              }
+            } catch (e) {
+              paymentFailed('⚠️ Payment verification error. Please check your payment status on the Payments page.')
+            }
+            setPayingOrder(null)
+          },
+          theme: { color: '#7c3aed' },
+          modal: {
+            ondismiss: () => { setPayingOrder(null) },
+          },
+        }
+        const rzp = new window.Razorpay(options)
+        rzp.on('payment.failed', () => {
+          paymentFailed('❌ Payment failed. Your order has NOT been marked as paid. You can retry payment.')
+          setPayingOrder(null)
+        })
+        rzp.open()
+      } else {
+        // Demo mode (no Razorpay keys configured) - simulate success
+        setTimeout(async () => {
+          try {
+            const demoRes = await fetch(`/api/payments/demo-success/${payment.order_id}`, { method: 'POST' })
+            if (demoRes.ok) {
+              paymentSuccess()
+            } else {
+              paymentFailed('❌ Payment was not completed. Your order has NOT been marked as paid. Please try again.')
+            }
+          } catch (e) {
+            paymentFailed('⚠️ Demo payment simulation failed. Please try again.')
+          }
+          setPayingOrder(null)
+        }, 1500)
+      }
+    } catch (e) {
+      paymentFailed('⚠️ Failed to initialize payment. Please try again.')
+      setPayingOrder(null)
+    }
+  }, [sessionId])
+
+  // Load Razorpay checkout script
+  useEffect(() => {
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    document.body.appendChild(script)
+    return () => { document.body.removeChild(script) }
+  }, [])
 
   const clearChat = () => {
     setMessages([WELCOME_MESSAGE])
@@ -361,6 +478,44 @@ export default function BuyerPage() {
                   <a href="/cart" className="block text-center text-xs px-3 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg transition-colors">
                     View Cart & Checkout →
                   </a>
+                </div>
+              )}
+
+              {/* Payment / Checkout Info */}
+              {msg.payment && (
+                <div className="mt-3 p-4 bg-dark-700/50 rounded-lg border border-dark-600">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-white">💳 Checkout</span>
+                    <span className="text-sm font-bold text-primary-400">₹{msg.payment.total.toLocaleString()}</span>
+                  </div>
+                  <p className="text-xs text-dark-400 mb-2">Order #{msg.payment.order_id.slice(0, 8).toUpperCase()} · Razorpay TEST MODE</p>
+                  {msg.payment.items && msg.payment.items.length > 0 && (
+                    <div className="space-y-1 mb-2">
+                      {msg.payment.items.map((item, i) => (
+                        <div key={i} className="flex justify-between text-xs text-dark-300">
+                          <span className="truncate mr-2">{item.product_name} × {item.quantity}</span>
+                          <span className="flex-shrink-0">₹{item.subtotal.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="space-y-1 text-xs mb-3">
+                    <div className="flex justify-between text-dark-400"><span>Subtotal</span><span>₹{msg.payment.subtotal.toLocaleString()}</span></div>
+                    {msg.payment.discount > 0 && (
+                      <div className="flex justify-between text-emerald-400"><span>Discount</span><span>-₹{msg.payment.discount.toLocaleString()}</span></div>
+                    )}
+                    <div className="flex justify-between text-dark-400"><span>Tax (18%)</span><span>₹{msg.payment.tax.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-dark-400"><span>Shipping</span><span>{msg.payment.shipping === 0 ? 'Free' : `₹${msg.payment.shipping}`}</span></div>
+                    <div className="flex justify-between border-t border-dark-600 pt-1 text-white font-semibold"><span>Total</span><span>₹{msg.payment.total.toLocaleString()}</span></div>
+                  </div>
+                  <button
+                    onClick={() => payWithRazorpay(msg)}
+                    disabled={payingOrder === msg.payment.order_id}
+                    className="w-full text-xs px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-dark-600 text-white rounded-lg transition-colors font-medium"
+                  >
+                    {payingOrder === msg.payment.order_id ? '⏳ Processing...' : '💳 Pay with Razorpay'}
+                  </button>
+                  <p className="text-[10px] text-dark-500 text-center mt-1.5">TEST MODE — No real money charged</p>
                 </div>
               )}
 

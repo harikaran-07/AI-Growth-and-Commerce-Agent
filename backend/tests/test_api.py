@@ -434,6 +434,121 @@ async def test_update_policy(client):
     await client.put("/api/policies/", json={"max_transaction_amount": 500000})
 
 
+# ==================== Chatbot Intent Detection ====================
+
+def test_intent_add_first_one():
+    from services.ai_provider import detect_intent
+    result = detect_intent("add the first one to cart")
+    assert result["intent"] == "add_to_cart"
+    assert result["entities"]["position"] == 1
+
+
+def test_intent_add_second_one():
+    from services.ai_provider import detect_intent
+    result = detect_intent("add the second one")
+    assert result["intent"] == "add_to_cart"
+    assert result["entities"]["position"] == 2
+
+
+def test_intent_add_last_one():
+    from services.ai_provider import detect_intent
+    result = detect_intent("add the last one to cart")
+    assert result["intent"] == "add_to_cart"
+    assert result["entities"]["position"] == "last"
+
+
+def test_intent_checkout():
+    from services.ai_provider import detect_intent
+    result = detect_intent("checkout")
+    assert result["intent"] == "checkout"
+
+
+def test_intent_product_search_price():
+    from services.ai_provider import detect_intent
+    result = detect_intent("I need a smartphone under 50000")
+    # Price queries map to price_query/product_search depending on wording
+    assert result["intent"] in ("product_search", "price_query", "category_search", "recommendation")
+    assert result["entities"].get("max_price") == 50000
+
+
+# ==================== Conversational Checkout (Agent Chat) ====================
+
+async def test_chat_search_then_add_first(client):
+    # Search first so the session remembers results
+    resp = await client.post("/api/agent/chat", json={
+        "message": "show me headphones",
+        "session_id": "chat_flow_1",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["products"]) > 0
+    first_id = data["products"][0]["product_id"]
+
+    # "add the first one" must add the FIRST product from the last search
+    resp2 = await client.post("/api/agent/chat", json={
+        "message": "add the first one to cart",
+        "session_id": "chat_flow_1",
+    })
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert "Added" in data2["message"]
+    assert data2["cart"] is not None
+    assert data2["cart"]["item_count"] == 1
+
+    # Verify the real cart (shared with the cart page) has that product
+    cart_resp = await client.get("/api/carts/session/chat_flow_1")
+    assert cart_resp.status_code == 200
+    cart = cart_resp.json()
+    assert cart["item_count"] == 1
+    assert cart["items"][0]["product_id"] == first_id
+
+
+async def test_chat_checkout_creates_order_and_payment(client):
+    # Add product to cart through the session cart API (same cart the chat uses)
+    await client.post("/api/carts/session/chat_flow_2/add",
+        json={"product_id": "p1", "quantity": 1})
+
+    resp = await client.post("/api/agent/chat", json={
+        "message": "checkout",
+        "session_id": "chat_flow_2",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["payment"] is not None
+    payment = data["payment"]
+    assert payment["order_id"]
+    assert payment["razorpay_order_id"].startswith("order_")
+    assert payment["amount"] > 0
+    assert payment["total"] > 0
+    assert "Checkout" in data["message"] or "ready" in data["message"]
+
+    # Verify the order was persisted and payment initiated
+    order_resp = await client.get(f"/api/orders/{payment['order_id']}")
+    assert order_resp.status_code == 200
+    order = order_resp.json()
+    assert order["status"] == "payment_initiated"
+    assert order["payment_status"] == "processing"
+    assert order["razorpay_order_id"] == payment["razorpay_order_id"]
+
+    # Verify audit events were recorded
+    audit_resp = await client.get("/api/audit/")
+    assert audit_resp.status_code == 200
+    actions = [a["action"] for a in audit_resp.json()]
+    assert "ORDER_CREATED" in actions
+    assert "PAYMENT_INITIATED" in actions
+
+
+async def test_chat_checkout_empty_cart(client):
+    resp = await client.post("/api/agent/chat", json={
+        "message": "checkout",
+        "session_id": "chat_flow_empty",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["payment"] is None
+    assert "cart is empty" in data["message"].lower()
+
+
 # ==================== Full E2E Flow ====================
 
 async def test_e2e_cart_to_payment(client):

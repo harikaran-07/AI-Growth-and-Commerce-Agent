@@ -93,9 +93,17 @@ INTENT_PATTERNS = [
     ]},
     {"intent": "add_to_cart", "patterns": [
         r"\b(add|put|place)\s+(this|it|product|\d+\s*(st|nd|rd|th)?)?\s*(to|in|into)\s+(my\s+)?cart\b",
-        r"\b(buy|purchase|get)\s+(this|it)\b",
+        r"\b(add|put|place)\s+(the\s+)?(first|second|third|fourth|fifth|last|\d+\s*(st|nd|rd|th)?)(\s+one)?(\s+item)?\s*(to|in|into)\s+(my\s+)?cart\b",
+        r"\b(add|put|place)\s+(the\s+)?(first|second|third|fourth|fifth|last|\d+\s*(st|nd|rd|th)?)(\s+one)?(\s+item)?\s*(please)?\b",
+        r"\b(buy|purchase|get)\s+(this|it|the\s+first\s+one)\b",
         r"\b(add)\s+(\d+)\s*(x|pieces?|units?)?\s*(to|in)?\s*(my\s+)?cart\b",
         r"\b(add)\s+(\d+)\b"
+    ]},
+    {"intent": "checkout", "patterns": [
+        r"\b(checkout|check\s*out)\b",
+        r"\b(place|complete|finish)\s+(my\s+|the\s+)?order\b",
+        r"\b(proceed\s+to\s+(payment|checkout)|pay\s+now|buy\s+now|complete\s+(the\s+)?purchase)\b",
+        r"\b(i\s+am\s+ready\s+to\s+pay|let'?s\s+pay|pay\s+for\s+(my\s+)?(cart|order))\b"
     ]},
     {"intent": "remove_from_cart", "patterns": [
         r"\b(remove|delete|drop|take\s*out)\s+(this|it|product|\d+\s*(st|nd|rd|th)?)?\s*(from\s+)?(my\s+)?cart\b"
@@ -314,6 +322,21 @@ def detect_intent(text: str) -> Dict[str, Any]:
     if pos_match:
         entities["position"] = int(pos_match.group(1))
 
+    # Extract word ordinals (first, second, third, last, next)
+    if "position" not in entities:
+        word_ordinals = {
+            "first": 1, "1st": 1,
+            "second": 2, "2nd": 2,
+            "third": 3, "3rd": 3,
+            "fourth": 4, "4th": 4,
+            "fifth": 5, "5th": 5,
+            "last": "last",
+        }
+        for word, pos in word_ordinals.items():
+            if re.search(r'\b(?:the\s+)?' + re.escape(word) + r'\b', text_lower):
+                entities["position"] = pos
+                break
+
     # Extract category
     for alias, category in CATEGORY_ALIASES.items():
         if re.search(r'\b' + re.escape(alias) + r'\b', text_lower):
@@ -431,6 +454,12 @@ async def generate_response(intent_result: Dict, tools_fn, db=None, session_id: 
             "quick_actions": [
                 {"label": "Show Cart", "message": "Show my cart"},
             ],
+        }
+
+    if intent == "checkout":
+        return {
+            "content": None,
+            "tool_calls": [{"name": "create_checkout", "arguments": {}}],
         }
 
     if intent == "order_status":

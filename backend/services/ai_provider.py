@@ -284,13 +284,15 @@ def resolve_followup_text(text: str, session_data: Dict) -> str:
 
     # 4. Short attribute-only continuation: "wireless", "16gb", "gaming", "in black"
     words = t.split()
-    is_short = 1 <= len(words) <= 5
+    is_short = 1 <= len(words) <= 4
     has_trigger = any(w in SEARCH_TRIGGERS for w in words)
     has_budget = bool(re.search(r"(₹|rs\.?\s*)?\d", t)) or bool(re.search(r"(under|below|upto|above|over)\b", t))
     is_ordinal = bool(re.search(r"\b(first|second|third|fourth|fifth|last|one|two|three|four|five)\b", t))
-    # Phrases that obviously start something new rather than refine the last search
+    # Full questions / new topics / category words are NOT refinements
+    is_question = bool(re.search(r"\b(what|which|who|why|how|can|do|is|are)\b", t))
+    names_category = any(w in CATEGORY_ALIASES for w in words)
     new_topic = re.search(r"\b(show|find|search|need|want|looking|browse|display|list|best\s+sellers?|cart|order|payment|help|hi|hello)\b", t)
-    if has_search and is_short and not has_trigger and not new_topic and not has_budget and not is_ordinal:
+    if has_search and is_short and not has_trigger and not new_topic and not has_budget and not is_ordinal and not is_question and not names_category:
         return f"show me {prev_text} {t}"
 
     # 5. Deictic add with no position: "add it / add this" → the first result

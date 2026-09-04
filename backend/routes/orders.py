@@ -117,8 +117,8 @@ async def list_orders(
             tax=order.tax or 0,
             shipping=order.shipping or 0,
             total=order.total,
-            status=order.status or "pending",
-            payment_status=order.payment_status or "pending",
+            status=order.status or "PENDING_PAYMENT",
+            payment_status=order.payment_status or "PENDING",
             razorpay_order_id=order.razorpay_order_id,
             razorpay_payment_id=order.razorpay_payment_id,
             items=[OrderItemResponse(
@@ -144,22 +144,22 @@ async def order_stats(db: AsyncSession = Depends(get_db)):
     total_orders = total.scalar() or 0
 
     success_result = await db.execute(
-        select(func.count(Order.id)).where(Order.status == "success")
+        select(func.count(Order.id)).where(Order.status.in_(["CONFIRMED", "PAID"]))
     )
     success_orders = success_result.scalar() or 0
 
     revenue_result = await db.execute(
-        select(func.sum(Order.total)).where(Order.status == "success")
+        select(func.sum(Order.total)).where(Order.status.in_(["CONFIRMED", "PAID"]))
     )
     total_revenue = revenue_result.scalar() or 0
 
     avg_result = await db.execute(
-        select(func.avg(Order.total)).where(Order.status == "success")
+        select(func.avg(Order.total)).where(Order.status.in_(["CONFIRMED", "PAID"]))
     )
     avg_order_value = avg_result.scalar() or 0
 
     pending_result = await db.execute(
-        select(func.count(Order.id)).where(Order.status.in_(["pending", "processing"]))
+        select(func.count(Order.id)).where(Order.status.in_(["PENDING_PAYMENT", "pending", "processing", "payment_initiated"]))
     )
     pending_orders = pending_result.scalar() or 0
 
@@ -197,8 +197,8 @@ async def get_order(order_id: str, db: AsyncSession = Depends(get_db)):
         tax=order.tax or 0,
         shipping=order.shipping or 0,
         total=order.total,
-        status=order.status or "pending",
-        payment_status=order.payment_status or "pending",
+        status=order.status or "PENDING_PAYMENT",
+        payment_status=order.payment_status or "PENDING",
         razorpay_order_id=order.razorpay_order_id,
         razorpay_payment_id=order.razorpay_payment_id,
         items=[OrderItemResponse(
@@ -249,6 +249,7 @@ async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db))
     # Never trust price/quantity from browser
     subtotal = 0
     order_items = []
+    cart_snapshot = []
     for ci, p in rows:
         # Re-verify stock from database
         if p.stock < ci.quantity:
@@ -263,10 +264,57 @@ async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db))
             "price": p.price,
             "subtotal": item_subtotal,
         })
+        cart_snapshot.append((p.id, ci.quantity))
 
     # Validate price integrity
     if subtotal <= 0:
         raise HTTPException(status_code=400, detail="Order total must be greater than zero")
+
+    # Idempotent checkout (spec §6): if this cart already has an order awaiting
+    # payment (PENDING_PAYMENT / PAYMENT_FAILED) for the exact same contents,
+    # return that order instead of creating a duplicate. Covers page refreshes
+    # and repeated "Place Order" clicks.
+    existing_result = await db.execute(
+        select(Order).where(
+            Order.cart_id == cart.id,
+            Order.status.in_(["PENDING_PAYMENT", "PAYMENT_FAILED"]),
+        ).order_by(Order.created_at.desc()).limit(1)
+    )
+    existing_order = existing_result.scalar_one_or_none()
+    if existing_order:
+        ex_items_result = await db.execute(
+            select(OrderItem).where(OrderItem.order_id == existing_order.id)
+        )
+        ex_items = ex_items_result.scalars().all()
+        existing_snapshot = [(i.product_id, i.quantity) for i in ex_items]
+        if existing_snapshot == cart_snapshot:
+            return OrderResponse(
+                id=existing_order.id,
+                cart_id=existing_order.cart_id,
+                customer_name=existing_order.customer_name,
+                customer_email=existing_order.customer_email,
+                customer_phone=existing_order.customer_phone,
+                customer_address=existing_order.customer_address,
+                subtotal=existing_order.subtotal or 0,
+                discount=existing_order.discount or 0,
+                tax=existing_order.tax or 0,
+                shipping=existing_order.shipping or 0,
+                total=existing_order.total,
+                status=existing_order.status or "PENDING_PAYMENT",
+                payment_status=existing_order.payment_status or "PENDING",
+                razorpay_order_id=existing_order.razorpay_order_id,
+                razorpay_payment_id=existing_order.razorpay_payment_id,
+                items=[OrderItemResponse(
+                    id=i.id, product_id=i.product_id, product_name=i.product_name,
+                    quantity=i.quantity, price=i.price, subtotal=i.subtotal
+                ) for i in ex_items],
+                created_at=existing_order.created_at
+            )
+        # Cart contents changed since the previous attempt: supersede the stale
+        # pending order so at most one unpaid order exists per cart.
+        existing_order.status = "CANCELLED"
+        existing_order.payment_status = "CANCELLED"
+        await db.commit()
 
     # Calculate tax (18% GST) and shipping server-side
     discount = min(request.discount, subtotal * 0.1) if request.discount else 0  # Max 10% discount
@@ -287,8 +335,8 @@ async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db))
         tax=tax,
         shipping=shipping,
         total=total,
-        status="pending",
-        payment_status="pending",
+        status="PENDING_PAYMENT",
+        payment_status="PENDING",
     )
     db.add(order)
     await db.commit()
@@ -307,21 +355,29 @@ async def checkout(request: CheckoutRequest, db: AsyncSession = Depends(get_db))
         db.add(order_item)
     await db.commit()
 
-    # Mark cart as completed
-    cart.status = "completed"
-    await db.commit()
+    # The cart intentionally stays ACTIVE with its items until the payment is
+    # verified — payments._mark_order_paid completes and empties it on success
+    # (spec §8). If payment fails or is cancelled, the cart therefore remains
+    # fully available for retry.
 
     # Create audit log
     from models.models import AuditLog
-    audit = AuditLog(
-        action="ORDER_CREATED",
-        description=f"Order {order.id} created from cart {cart.id}, total: {total}",
-        event_type="order",
-        related_entity=order.id,
-        financial_impact=total,
-        final_status="pending",
-    )
-    db.add(audit)
+    from datetime import datetime, timezone
+    for action, desc, status, decision in [
+        ("CHECKOUT_CREATED", f"Checkout started for cart {cart.id}", "checkout_started", "checkout_started"),
+        ("ORDER_CREATED", f"Order {order.id} created from cart {cart.id}, total: {total}", "PENDING_PAYMENT", "order_created_awaiting_payment"),
+    ]:
+        audit = AuditLog(
+            action=action,
+            description=desc,
+            event_type="order",
+            related_entity=order.id,
+            decision=decision,
+            financial_impact=total,
+            final_status=status,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(audit)
     await db.commit()
 
     return OrderResponse(

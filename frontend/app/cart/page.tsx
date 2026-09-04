@@ -189,7 +189,7 @@ export default function CartPage() {
           prefill: { name: checkoutData.name, email: checkoutData.email, contact: checkoutData.phone },
           theme: { color: '#7c3aed' },
           modal: {
-            ondismiss: () => { setProcessing(false); setPaymentError('Payment cancelled. You can retry from the payment step.') },
+            ondismiss: () => { setProcessing(false); setPaymentError('Payment cancelled. Your cart is still available. You can retry from the payment step.') },
           },
         }
         const rzp = new window.Razorpay(options)
@@ -253,7 +253,7 @@ export default function CartPage() {
       {step === 'success' ? (
         <div className="card p-8 text-center">
           <div className="text-6xl mb-4">✅</div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment Successful!</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment successful! Your order has been confirmed.</h2>
           <p className="text-slate-600 mb-1">Order #{orderResult?.id.slice(0, 8)}</p>
           <p className="text-slate-500 text-sm mb-6">Total: ₹{orderResult?.total.toLocaleString()}</p>
           <div className="flex gap-3 justify-center">
@@ -264,9 +264,12 @@ export default function CartPage() {
       ) : step === 'failed' ? (
         <div className="card p-8 text-center">
           <div className="text-6xl mb-4">❌</div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment Failed</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment failed. Please try again.</h2>
           <p className="text-red-600 text-sm mb-6">{paymentError || 'Unknown error'}</p>
-          <button onClick={() => { setStep('cart'); setPaymentError('') }} className="btn-primary">Try Again</button>
+          <div className="flex gap-3 justify-center">
+            <button onClick={() => { setStep('payment'); setPaymentError('') }} className="btn-primary">Retry Payment</button>
+            <button onClick={() => { setStep('cart'); setPaymentError('') }} className="btn-secondary">Back to Cart</button>
+          </div>
         </div>
       ) : step === 'payment' && orderResult ? (
         <div className="card p-6">

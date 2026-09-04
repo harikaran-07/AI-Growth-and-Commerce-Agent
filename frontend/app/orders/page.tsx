@@ -10,7 +10,7 @@ interface OrderItem {
 interface Order {
   id: string; customer_name: string; customer_email: string; subtotal: number; discount: number;
   tax: number; shipping: number; total: number; status: string; payment_status: string;
-  razorpay_order_id: string; items: OrderItem[]; created_at: string;
+  razorpay_order_id: string; razorpay_payment_id: string; items: OrderItem[]; created_at: string;
 }
 
 export default function OrdersPage() {
@@ -39,12 +39,17 @@ export default function OrdersPage() {
 
   const statusColor = (s: string) => {
     const m: Record<string, string> = {
-      success: 'badge-success', paid: 'badge-success', delivered: 'badge-success',
-      pending: 'badge-warning', processing: 'badge-warning',
+      CONFIRMED: 'badge-success', PAID: 'badge-success', success: 'badge-success', paid: 'badge-success', delivered: 'badge-success',
+      PENDING_PAYMENT: 'badge-warning', PENDING: 'badge-warning', CREATED: 'badge-warning',
+      pending: 'badge-warning', processing: 'badge-warning', initiated: 'badge-warning',
+      PAYMENT_FAILED: 'badge-danger', FAILED: 'badge-danger', CANCELLED: 'badge-danger',
       failed: 'badge-danger', payment_failed: 'badge-danger', cancelled: 'badge-danger',
+      approved: 'badge-info', approval_pending: 'badge-info', CAPTURED: 'badge-info',
     }
     return m[s] || 'badge-neutral'
   }
+
+  const paymentLabel = (s: string) => (s || '—').toUpperCase()
 
   if (loading) {
     return (
@@ -64,13 +69,12 @@ export default function OrdersPage() {
           <h1 className="text-2xl font-bold text-slate-900">Orders</h1>
           <p className="text-slate-500 text-sm mt-1">{total} total orders</p>
         </div>
-        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }} className="input w-48">
+        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }} className="input w-52">
           <option value="">All Status</option>
-          <option value="success">Paid</option>
-          <option value="pending">Pending</option>
-          <option value="processing">Processing</option>
-          <option value="failed">Failed</option>
-          <option value="cancelled">Cancelled</option>
+          <option value="CONFIRMED">Paid · Confirmed</option>
+          <option value="PENDING_PAYMENT">Pending Payment</option>
+          <option value="PAYMENT_FAILED">Payment Failed</option>
+          <option value="CANCELLED">Cancelled</option>
         </select>
       </div>
 
@@ -89,22 +93,25 @@ export default function OrdersPage() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Order ID</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Customer</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Items</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Products</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Total</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Payment</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Order Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date / Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {orders.map(order => (
                     <tr key={order.id} className="hover:bg-slate-100 cursor-pointer transition-colors" onClick={() => setSelectedOrder(order)}>
                       <td className="px-4 py-3 font-mono text-slate-700">{order.id.slice(0, 8)}...</td>
-                      <td className="px-4 py-3 text-slate-700">{order.customer_name || '-'}</td>
-                      <td className="px-4 py-3 text-slate-600">{order.items?.length || 0}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {(order.items || []).slice(0, 2).map(i => sanitizeProductName(i.product_name)).join(', ')}
+                        {(order.items || []).length > 2 ? ` +${order.items!.length - 2} more` : ''}
+                      </td>
                       <td className="px-4 py-3 font-semibold text-slate-900">₹{order.total.toLocaleString()}</td>
+                      <td className="px-4 py-3"><span className={statusColor(order.payment_status)}>{paymentLabel(order.payment_status)}</span></td>
                       <td className="px-4 py-3"><span className={statusColor(order.status)}>{order.status}</span></td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '-'}</td>
+                      <td className="px-4 py-3 text-slate-500 text-xs">{order.created_at ? new Date(order.created_at).toLocaleString() : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -138,8 +145,11 @@ export default function OrdersPage() {
               <div className="space-y-2 text-sm mb-4">
                 <div className="flex justify-between"><span className="text-slate-500">Customer</span><span className="text-slate-900">{selectedOrder.customer_name || '-'}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Email</span><span className="text-slate-900">{selectedOrder.customer_email || '-'}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Status</span><span className={statusColor(selectedOrder.status)}>{selectedOrder.status}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Payment</span><span className={statusColor(selectedOrder.payment_status)}>{selectedOrder.payment_status}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Order Status</span><span className={statusColor(selectedOrder.status)}>{selectedOrder.status}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Payment</span><span className={statusColor(selectedOrder.payment_status)}>{paymentLabel(selectedOrder.payment_status)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Razorpay Order</span><span className="text-slate-900 font-mono text-xs">{selectedOrder.razorpay_order_id || '-'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Razorpay Payment</span><span className="text-slate-900 font-mono text-xs">{selectedOrder.razorpay_payment_id || '-'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Created</span><span className="text-slate-900">{selectedOrder.created_at ? new Date(selectedOrder.created_at).toLocaleString() : '-'}</span></div>
               </div>
 
               <h3 className="text-sm font-semibold text-slate-900 mb-2">Items</h3>

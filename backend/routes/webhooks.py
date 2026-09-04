@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models.database import get_db
-from models.models import Payment, Order
+from models.models import Payment, Order, AuditLog
 import os
 import hashlib
 import hmac
@@ -90,24 +90,51 @@ async def _handle_payment_captured(payload: dict, db: AsyncSession):
         logger.warning(f"Payment not found for razorpay_order_id: {razorpay_order_id}")
         return
 
-    # Idempotency: skip if already succeeded
-    if payment.status == "success":
-        logger.info(f"Payment {payment.id} already marked as success, skipping")
+    # Idempotency: skip if already in a terminal success state
+    if payment.status in ("PAID", "CAPTURED"):
+        logger.info(f"Payment {payment.id} already in terminal state ({payment.status}), skipping")
         return
 
-    # Update payment
-    payment.razorpay_payment_id = razorpay_payment_id
-    payment.status = "success"
-
-    # Update order
+    # Server-side amount security: the captured amount must match the order total.
     order_result = await db.execute(select(Order).where(Order.id == payment.order_id))
     order = order_result.scalar_one_or_none()
+    try:
+        captured_amount = int(payment_entity.get("amount", 0))  # paise
+        expected_amount = int((order.total if order else payment.amount) * 100)
+        if captured_amount != expected_amount:
+            logger.warning(f"Webhook amount mismatch for payment {payment.id}: {captured_amount} != {expected_amount}")
+            payment.status = "FAILED"
+            payment.failure_reason = "Captured amount does not match order total"
+            if order:
+                order.status = "PAYMENT_FAILED"
+                order.payment_status = "FAILED"
+            await db.commit()
+            return
+    except (TypeError, ValueError):
+        logger.warning(f"Could not parse captured amount for payment {payment.id}")
+
+    # Money was captured by Razorpay. The payment is NOT marked PAID yet — the
+    # frontend /api/payments/verify callback performs signature verification and
+    # promotes CAPTURED → PAID / order → CONFIRMED. This honors the rule that
+    # only a verified payment becomes PAID.
+    payment.razorpay_payment_id = razorpay_payment_id
+    payment.status = "CAPTURED"
     if order:
-        order.status = "success"
         order.razorpay_payment_id = razorpay_payment_id
 
+    db.add(AuditLog(
+        action="PAYMENT_CAPTURED",
+        description=f"Razorpay webhook: payment {razorpay_payment_id} captured for order {payment.order_id}",
+        event_type="payment",
+        related_entity=payment.order_id,
+        payment_reference=razorpay_payment_id,
+        decision="Captured by Razorpay — awaiting signature verification",
+        policy_result="amount_validated",
+        final_status="CAPTURED",
+        financial_impact=payment.amount,
+    ))
     await db.commit()
-    logger.info(f"Payment {payment.id} marked as success via webhook")
+    logger.info(f"Payment {payment.id} marked as CAPTURED via webhook")
 
 
 async def _handle_payment_failed(payload: dict, db: AsyncSession):
@@ -129,19 +156,31 @@ async def _handle_payment_failed(payload: dict, db: AsyncSession):
         logger.warning(f"Payment not found for razorpay_order_id: {razorpay_order_id}")
         return
 
-    # Idempotency: skip if already failed or succeeded
-    if payment.status in ("failed", "success"):
+    # Idempotency: skip if already in a terminal state
+    if payment.status in ("FAILED", "PAID", "CAPTURED"):
         logger.info(f"Payment {payment.id} already in terminal state ({payment.status}), skipping")
         return
 
-    payment.status = "failed"
+    payment.status = "FAILED"
     payment.failure_reason = error_description
 
     # Update order
     order_result = await db.execute(select(Order).where(Order.id == payment.order_id))
     order = order_result.scalar_one_or_none()
     if order:
-        order.status = "failed"
+        order.status = "PAYMENT_FAILED"
+        order.payment_status = "FAILED"
 
+    db.add(AuditLog(
+        action="PAYMENT_FAILED",
+        description=f"Razorpay webhook: payment failed for order {payment.order_id}: {error_description}",
+        event_type="payment",
+        related_entity=payment.order_id,
+        payment_reference=payment.razorpay_order_id,
+        decision="Payment failed — order NOT marked paid",
+        policy_result="payment_declined",
+        final_status="FAILED",
+        financial_impact=payment.amount,
+    ))
     await db.commit()
-    logger.info(f"Payment {payment.id} marked as failed via webhook")
+    logger.info(f"Payment {payment.id} marked as FAILED via webhook")

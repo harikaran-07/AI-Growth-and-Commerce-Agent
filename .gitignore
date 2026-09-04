@@ -29,6 +29,7 @@ coverage/
 # backend database
 backend/merchantflow.db
 merchantflow.db
+*.db.bak
 
 # Python
 *.egg-info/

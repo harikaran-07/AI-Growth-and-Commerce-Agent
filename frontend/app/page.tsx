@@ -23,6 +23,14 @@ interface FunnelStage {
   pct: number
 }
 
+interface RealTransactions {
+  total_orders: number
+  successful_payments: number
+  total_revenue: number
+  average_order_value: number
+  payment_success_rate: number
+}
+
 interface DashboardData {
   data_source?: string
   label?: string
@@ -76,6 +84,7 @@ function ProductImage({ src, alt, className }: { src?: string; alt: string; clas
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
+  const [real, setReal] = useState<RealTransactions | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chartPeriod, setChartPeriod] = useState('30d')
@@ -96,6 +105,21 @@ export default function Dashboard() {
       const d = await res.json()
       setData(d)
       setChartData(d.revenue_chart || [])
+      // Real transaction metrics come from actual order/payment records
+      // (spec §11) — never hardcoded, they update as new orders are created.
+      try {
+        const realRes = await fetch('/api/analytics/')
+        if (realRes.ok) {
+          const a = await realRes.json()
+          setReal({
+            total_orders: a.total_orders || 0,
+            successful_payments: a.completed_orders || 0,
+            total_revenue: a.total_revenue || 0,
+            average_order_value: a.average_order_value || 0,
+            payment_success_rate: a.payment_success_rate || 0,
+          })
+        }
+      } catch (e) { /* real metrics are supplementary */ }
     } catch (e) {
       console.error('Failed to fetch dashboard', e)
       setError('Unable to load analytics')
@@ -172,6 +196,41 @@ export default function Dashboard() {
           <p className="text-[11px] text-amber-600/80 mt-2">{data.disclaimer}</p>
         )}
       </div>
+
+      {/* Real Transactions — from verified order/payment records (spec §11) */}
+      {real && (
+        <div className="card p-5 mb-6 border-primary-200">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Real Transactions (TEST MODE)</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">Computed live from verified order & payment records — updates automatically</p>
+            </div>
+            <span className="badge-success text-[10px] px-2 py-0.5">Real Data</span>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-slate-100 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 mb-1">Total Orders</p>
+              <p className="text-lg font-bold text-slate-900">{formatNumber(real.total_orders)}</p>
+            </div>
+            <div className="bg-slate-100 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 mb-1">Successful Payments</p>
+              <p className="text-lg font-bold text-emerald-600">{formatNumber(real.successful_payments)}</p>
+            </div>
+            <div className="bg-slate-100 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 mb-1">Total Revenue</p>
+              <p className="text-lg font-bold text-emerald-600">₹{formatNumber(real.total_revenue)}</p>
+            </div>
+            <div className="bg-slate-100 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 mb-1">Avg Order Value</p>
+              <p className="text-lg font-bold text-primary-600">₹{formatNumber(real.average_order_value)}</p>
+            </div>
+            <div className="bg-slate-100 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 mb-1">Payment Success Rate</p>
+              <p className="text-lg font-bold text-cyan-600">{real.payment_success_rate}%</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

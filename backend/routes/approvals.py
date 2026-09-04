@@ -69,7 +69,8 @@ async def reject(approval_id: str, db: AsyncSession = Depends(get_db)):
     order_result = await db.execute(select(Order).where(Order.id == approval.order_id))
     order = order_result.scalar_one_or_none()
     if order:
-        order.status = "cancelled"
+        order.status = "CANCELLED"
+        order.payment_status = "CANCELLED"
 
     await db.commit()
     return {"status": "rejected", "order_id": approval.order_id}

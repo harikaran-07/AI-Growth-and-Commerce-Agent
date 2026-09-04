@@ -100,7 +100,7 @@ class DashboardResponse(BaseModel):
 async def _get_successful_orders(db: AsyncSession) -> list:
     """Get all successful/paid orders."""
     result = await db.execute(
-        select(Order).where(Order.status == "success")
+        select(Order).where(Order.status.in_(["CONFIRMED", "PAID"]))
     )
     return result.scalars().all()
 
@@ -170,10 +170,10 @@ async def get_analytics(db: AsyncSession = Depends(get_db)):
     
     # Get all orders
     all_orders = await _get_all_orders(db)
-    successful_orders = [o for o in all_orders if o.status == "success"]
-    failed_orders = [o for o in all_orders if o.status in ("failed", "payment_failed")]
-    pending_orders = [o for o in all_orders if o.status in ("pending", "payment_initiated", "processing")]
-    cancelled_orders = [o for o in all_orders if o.status == "cancelled"]
+    successful_orders = [o for o in all_orders if o.status in ("CONFIRMED", "PAID")]
+    failed_orders = [o for o in all_orders if o.status in ("PAYMENT_FAILED", "failed", "payment_failed")]
+    pending_orders = [o for o in all_orders if o.status in ("PENDING_PAYMENT", "pending", "payment_initiated", "processing")]
+    cancelled_orders = [o for o in all_orders if o.status in ("CANCELLED", "cancelled")]
     refunded_orders = [o for o in all_orders if o.status == "refunded"]
     
     # Revenue from successful paid orders ONLY
@@ -255,7 +255,26 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
     looks empty. Real orders and Razorpay payments stay separate - they are
     reported by /api/analytics/ and the Orders/Payments pages.
     """
-    return await generate_synthetic_dataset(db)
+    dataset = await generate_synthetic_dataset(db)
+    # Real transaction metrics (spec §11): computed from actual order/payment
+    # records so the dashboard always reflects verified transactions, never
+    # hardcoded numbers. Synthetic demo data remains clearly labeled.
+    all_orders = await _get_all_orders(db)
+    successful = [o for o in all_orders if o.status in ("CONFIRMED", "PAID")]
+    failed = [o for o in all_orders if o.status in ("PAYMENT_FAILED", "failed", "payment_failed")]
+    total_revenue = sum(safe_float(o.total, 0) for o in successful)
+    payment_total = len(all_orders) + len(failed)
+    success_count = len(successful)
+    dataset["real_transactions"] = {
+        "data_source": "real",
+        "label": "Real Transactions (verified records)",
+        "total_orders": len(all_orders),
+        "successful_payments": success_count,
+        "total_revenue": round(total_revenue, 2),
+        "average_order_value": round(total_revenue / success_count, 2) if success_count else 0,
+        "payment_success_rate": round(success_count / payment_total * 100, 1) if payment_total else 0,
+    }
+    return dataset
 
 
 def _ensure_aware(dt: datetime) -> datetime:

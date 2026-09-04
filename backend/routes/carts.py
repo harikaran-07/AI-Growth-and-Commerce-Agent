@@ -71,6 +71,18 @@ async def _get_or_create_cart(db: AsyncSession, session_id: str) -> Cart:
         db.add(cart)
         await db.commit()
         await db.refresh(cart)
+        from datetime import datetime, timezone
+        from models.models import AuditLog
+        db.add(AuditLog(
+            action="CART_CREATED",
+            description=f"New cart {cart.id} created for session {session_id}",
+            event_type="cart",
+            related_entity=cart.id,
+            decision="cart_started",
+            final_status="active",
+            created_at=datetime.now(timezone.utc),
+        ))
+        await db.commit()
     return cart
 
 

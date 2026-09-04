@@ -29,11 +29,15 @@ export default function PaymentsPage() {
 
   const statusColor = (s: string) => {
     const m: Record<string, string> = {
-      initiated: 'badge-info', success: 'badge-success',
-      failed: 'badge-danger', created: 'badge-neutral',
+      PAID: 'badge-success', CAPTURED: 'badge-success', success: 'badge-success',
+      PENDING: 'badge-warning', CREATED: 'badge-info', initiated: 'badge-warning',
+      FAILED: 'badge-danger', failed: 'badge-danger', CANCELLED: 'badge-neutral',
+      AUTHORIZED: 'badge-info',
     }
     return m[s] || 'badge-neutral'
   }
+
+  const paymentId = (p: Payment) => p.razorpay_payment_id || p.id
 
   return (
     <div className="p-6 lg:p-8">
@@ -55,19 +59,23 @@ export default function PaymentsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Payment ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Order ID</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Currency</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Razorpay ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Razorpay Order</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Created At</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {payments.map(p => (
                   <tr key={p.id} className="hover:bg-slate-100">
-                    <td className="px-4 py-3 font-mono text-slate-700 text-xs">{p.id.slice(0, 8)}...</td>
+                    <td className="px-4 py-3 font-mono text-slate-700 text-xs">{paymentId(p)}</td>
+                    <td className="px-4 py-3 font-mono text-slate-600 text-xs">{p.order_id.slice(0, 8)}...</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">₹{p.amount.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-slate-600 text-xs uppercase">{p.currency || 'INR'}</td>
                     <td className="px-4 py-3">
                       <span className={statusColor(p.status)}>{p.status}</span>
                       {p.failure_reason && <p className="text-xs text-red-600 mt-1">{p.failure_reason}</p>}
@@ -75,7 +83,7 @@ export default function PaymentsPage() {
                     <td className="px-4 py-3 text-slate-600 font-mono text-xs">{p.razorpay_order_id || '-'}</td>
                     <td className="px-4 py-3 text-slate-500 text-xs">{p.created_at ? new Date(p.created_at).toLocaleString() : '-'}</td>
                     <td className="px-4 py-3">
-                      {p.status === 'initiated' && (
+                      {p.status === 'PENDING' && (
                         <button onClick={() => handleDemoFail(p.id)} className="text-xs text-red-600 hover:text-red-700">Demo Fail</button>
                       )}
                     </td>

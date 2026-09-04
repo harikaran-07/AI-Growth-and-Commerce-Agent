@@ -664,6 +664,68 @@ async def _create_checkout(arguments: Dict, db: AsyncSession, session_id: str, s
     shipping = 0.0 if subtotal >= 500 else 49.0
     total = round(taxable + tax + shipping, 2)
 
+    cart_snapshot = [(i["product_id"], i["quantity"]) for i in order_items]
+
+    # Idempotent checkout (spec §6): if this cart already has an order awaiting
+    # payment (PENDING_PAYMENT / PAYMENT_FAILED) for the exact same contents,
+    # return the existing order + payment instead of creating a duplicate. This
+    # covers repeated "checkout" requests after a refresh or retry.
+    existing_order_result = await db.execute(
+        select(Order).where(
+            Order.cart_id == cart.id,
+            Order.status.in_(["PENDING_PAYMENT", "PAYMENT_FAILED"]),
+        ).order_by(Order.created_at.desc()).limit(1)
+    )
+    existing_order = existing_order_result.scalar_one_or_none()
+    if existing_order:
+        existing_items_result = await db.execute(
+            select(OrderItem).where(OrderItem.order_id == existing_order.id)
+        )
+        existing_items = existing_items_result.scalars().all()
+        existing_snapshot = [(i.product_id, i.quantity) for i in existing_items]
+        if existing_snapshot == cart_snapshot:
+            existing_payment_result = await db.execute(
+                select(Payment).where(Payment.order_id == existing_order.id)
+                .order_by(Payment.created_at.desc()).limit(1)
+            )
+            existing_payment = existing_payment_result.scalar_one_or_none()
+            if existing_payment and existing_payment.razorpay_order_id:
+                from routes.payments import RAZORPAY_KEY_ID
+                key_id = RAZORPAY_KEY_ID if RAZORPAY_KEY_ID and "placeholder" not in RAZORPAY_KEY_ID.lower() else ""
+                session_data["last_order_id"] = existing_order.id
+                return json.dumps({
+                    "success": True,
+                    "order_id": existing_order.id,
+                    "payment_id": existing_payment.id,
+                    "razorpay_order_id": existing_payment.razorpay_order_id,
+                    "amount": int(existing_order.total * 100),
+                    "currency": "INR",
+                    "key_id": key_id,
+                    "subtotal": existing_order.subtotal or 0,
+                    "discount": existing_order.discount or 0,
+                    "tax": existing_order.tax or 0,
+                    "shipping": existing_order.shipping or 0,
+                    "total": existing_order.total,
+                    "items": [{
+                        "product_id": i.product_id,
+                        "product_name": i.product_name,
+                        "quantity": i.quantity,
+                        "price": i.price,
+                        "subtotal": i.subtotal,
+                    } for i in existing_items],
+                    "message": (
+                        f"Order {existing_order.id[:8].upper()} is still awaiting payment.\n\n"
+                        + "\n".join(f"• {i.product_name} x{i.quantity} — ₹{i.subtotal:,.0f}" for i in existing_items)
+                        + f"\n\nTotal: ₹{existing_order.total:,.0f}\n\n"
+                        + "Click 'Pay with Razorpay' below to complete payment (TEST MODE — no real money charged)."
+                    )
+                })
+        # Cart contents changed since a previous attempt: supersede the stale
+        # pending order so at most one unpaid order exists per cart.
+        existing_order.status = "CANCELLED"
+        existing_order.payment_status = "CANCELLED"
+        await db.commit()
+
     # Create order
     customer_name = (arguments.get("customer_name") or "Guest Customer").strip()
     customer_email = (arguments.get("customer_email") or "guest@demo.com").strip().lower()
@@ -676,8 +738,8 @@ async def _create_checkout(arguments: Dict, db: AsyncSession, session_id: str, s
         tax=tax,
         shipping=shipping,
         total=total,
-        status="pending",
-        payment_status="pending",
+        status="PENDING_PAYMENT",
+        payment_status="PENDING",
     )
     db.add(order)
     await db.commit()
@@ -695,18 +757,25 @@ async def _create_checkout(arguments: Dict, db: AsyncSession, session_id: str, s
         ))
     await db.commit()
 
-    # Mark cart as completed
-    cart.status = "completed"
-    await db.commit()
+    # The cart stays ACTIVE until the payment is verified — payments
+    # _mark_order_paid completes it on success (spec §8), so a failed or
+    # cancelled payment never clears the cart.
 
     session_data["last_order_id"] = order.id
 
+    await log_audit_event(
+        db, session_id, "CHECKOUT_CREATED",
+        tool_called="create_checkout",
+        input_data=json.dumps({"cart_id": cart.id}),
+        decision="Checkout started for cart",
+        final_status="checkout_started"
+    )
     await log_audit_event(
         db, session_id, "ORDER_CREATED",
         tool_called="create_checkout",
         input_data=json.dumps({"cart_id": cart.id, "total": total}),
         decision=f"Order {order.id[:8]} created, total ₹{total}",
-        final_status="pending"
+        final_status="PENDING_PAYMENT"
     )
 
     # Create Razorpay TEST MODE order (mirrors /api/payments/create-order)
@@ -730,24 +799,32 @@ async def _create_checkout(arguments: Dict, db: AsyncSession, session_id: str, s
         order_id=order.id,
         amount=total,
         currency="INR",
-        status="initiated",
+        status="PENDING",
         razorpay_order_id=razorpay_order_id,
     )
     db.add(payment)
 
-    order.status = "payment_initiated"
-    order.payment_status = "processing"
+    order.status = "PENDING_PAYMENT"
+    order.payment_status = "PENDING"
     order.razorpay_order_id = razorpay_order_id
     await db.commit()
     await db.refresh(payment)
 
     await log_audit_event(
-        db, session_id, "PAYMENT_INITIATED",
+        db, session_id, "RAZORPAY_ORDER_CREATED",
         tool_called="create_checkout",
         input_data=json.dumps({"order_id": order.id, "amount": total}),
         decision=f"Razorpay order {razorpay_order_id} created for ₹{total}",
         payment_reference=razorpay_order_id,
-        final_status="initiated"
+        final_status="PENDING"
+    )
+    await log_audit_event(
+        db, session_id, "PAYMENT_INITIATED",
+        tool_called="create_checkout",
+        input_data=json.dumps({"order_id": order.id, "amount": total}),
+        decision="Payment initiated — awaiting checkout",
+        payment_reference=razorpay_order_id,
+        final_status="PENDING"
     )
 
     key_id = RAZORPAY_KEY_ID if RAZORPAY_KEY_ID and "placeholder" not in RAZORPAY_KEY_ID.lower() else ""
@@ -889,7 +966,7 @@ async def _request_payment_approval(db: AsyncSession, session_id: str, session_d
     existing_order_result = await db.execute(
         select(Order).where(
             Order.cart_id == cart_id,
-            Order.status.in_(["approved", "payment_initiated", "success"])
+            Order.status.in_(["approved", "PENDING_PAYMENT", "CONFIRMED", "PAID"])
         )
     )
     existing_order = existing_order_result.scalar_one_or_none()
@@ -985,7 +1062,7 @@ async def _get_payment_status(arguments: Dict, db: AsyncSession, session_data: D
 async def _get_merchant_analytics(db: AsyncSession, session_id: str) -> str:
     """Get merchant business analytics from real order data."""
     # Get successful orders
-    orders_result = await db.execute(select(Order).where(Order.status == "success"))
+    orders_result = await db.execute(select(Order).where(Order.status.in_(["CONFIRMED", "PAID"])))
     successful_orders = orders_result.scalars().all()
 
     all_orders_result = await db.execute(select(Order))
@@ -1083,7 +1160,7 @@ async def _get_sales_recommendations(db: AsyncSession, session_id: str) -> str:
     products_map = {p.id: p for p in products}
 
     # Get successful orders
-    orders_result = await db.execute(select(Order).where(Order.status == "success"))
+    orders_result = await db.execute(select(Order).where(Order.status.in_(["CONFIRMED", "PAID"])))
     successful_orders = orders_result.scalars().all()
 
     # Calculate actual sales

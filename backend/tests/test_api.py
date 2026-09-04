@@ -260,7 +260,8 @@ async def test_checkout(client):
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "pending"
+    assert data["status"] == "PENDING_PAYMENT"
+    assert data["payment_status"] == "PENDING"
     assert data["customer_name"] == "Test User"
     assert data["total"] > 0
     assert data["tax"] > 0
@@ -574,8 +575,8 @@ async def test_chat_checkout_creates_order_and_payment(client):
     order_resp = await client.get(f"/api/orders/{payment['order_id']}")
     assert order_resp.status_code == 200
     order = order_resp.json()
-    assert order["status"] == "payment_initiated"
-    assert order["payment_status"] == "processing"
+    assert order["status"] == "PENDING_PAYMENT"
+    assert order["payment_status"] == "PENDING"
     assert order["razorpay_order_id"] == payment["razorpay_order_id"]
 
     # Verify audit events were recorded
@@ -624,7 +625,7 @@ async def test_e2e_cart_to_payment(client):
     })
     assert checkout_resp.status_code == 200
     order = checkout_resp.json()
-    assert order["status"] == "pending"
+    assert order["status"] == "PENDING_PAYMENT"
     assert order["tax"] > 0
 
     # 4. Demo payment
@@ -634,7 +635,8 @@ async def test_e2e_cart_to_payment(client):
     # 5. Verify order updated
     order_resp = await client.get(f"/api/orders/{order['id']}")
     assert order_resp.status_code == 200
-    assert order_resp.json()["status"] == "success"
+    assert order_resp.json()["status"] == "CONFIRMED"
+    assert order_resp.json()["payment_status"] == "PAID"
 
     # 6. Verify audit trail
     audit_resp = await client.get("/api/audit/")
@@ -977,4 +979,403 @@ async def test_chat_product_details_from_context(client):
     data = resp.json()
     assert "₹" in data["message"]
     assert "In stock" in data["message"]
+
+
+# ==================== Payment State Machine & Security (Spec §4-§9, §13-§15) ====================
+
+import hmac as _hmac
+import hashlib as _hashlib
+
+
+def _razorpay_sig(order_id: str, payment_id: str, secret: str) -> str:
+    """Compute the Razorpay-style HMAC-SHA256 signature (order_id|payment_id)."""
+    return _hmac.new(secret.encode("utf-8"), f"{order_id}|{payment_id}".encode("utf-8"), _hashlib.sha256).hexdigest()
+
+
+async def _make_order(client, session: str, product_id: str, qty: int = 1) -> dict:
+    """Helper: add product to a session cart and create the checkout order."""
+    await client.post(f"/api/carts/session/{session}/add",
+                      json={"product_id": product_id, "quantity": qty})
+    resp = await client.post("/api/orders/checkout", json={
+        "session_id": session,
+        "customer_name": "Spec Tester",
+        "customer_email": f"{session}@test.com",
+    })
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+async def test_payment_verify_success_real_signature(client, monkeypatch):
+    """Full path: checkout -> create Razorpay order -> verify with valid HMAC signature."""
+    monkeypatch.setattr("routes.payments.RAZORPAY_KEY_SECRET", "test_secret_123")
+    order = await _make_order(client, "spec_verify_1", "p1", 1)
+
+    # Idempotent order creation: calling twice returns the same Razorpay order.
+    r1 = await client.post("/api/payments/create-order", json={"order_id": order["id"]})
+    assert r1.status_code == 200
+    r2 = await client.post("/api/payments/create-order", json={"order_id": order["id"]})
+    assert r2.status_code == 200
+    assert r1.json()["razorpay_order_id"] == r2.json()["razorpay_order_id"]
+    rzp_order_id = r1.json()["razorpay_order_id"]
+
+    # Order is PENDING_PAYMENT, not paid.
+    o1 = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert o1["status"] == "PENDING_PAYMENT"
+    assert o1["payment_status"] == "PENDING"
+
+    payment_id = f"pay_spec_{order['id'][:8]}"
+    sig = _razorpay_sig(rzp_order_id, payment_id, "test_secret_123")
+    resp = await client.post("/api/payments/verify", json={
+        "razorpay_order_id": rzp_order_id,
+        "razorpay_payment_id": payment_id,
+        "razorpay_signature": sig,
+        "order_id": order["id"],
+    })
+    assert resp.status_code == 200, resp.text
+
+    o2 = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert o2["status"] == "CONFIRMED"
+    assert o2["payment_status"] == "PAID"
+    assert o2["razorpay_payment_id"] == payment_id
+
+    # Payment record reflects PAID.
+    payments = (await client.get("/api/payments/")).json()
+    p = next(p for p in payments if p["order_id"] == order["id"])
+    assert p["status"] == "PAID"
+    assert p["razorpay_payment_id"] == payment_id
+
+
+async def test_payment_invalid_signature_rejected(client, monkeypatch):
+    """Invalid signature: payment NOT marked paid, order NOT confirmed, failure recorded."""
+    monkeypatch.setattr("routes.payments.RAZORPAY_KEY_SECRET", "test_secret_456")
+    order = await _make_order(client, "spec_badsig_1", "p2", 1)
+    rzp = (await client.post("/api/payments/create-order", json={"order_id": order["id"]})).json()
+    rzp_order_id = rzp["razorpay_order_id"]
+
+    bad = _razorpay_sig(rzp_order_id, "pay_wrong", "WRONG_SECRET")
+    resp = await client.post("/api/payments/verify", json={
+        "razorpay_order_id": rzp_order_id,
+        "razorpay_payment_id": "pay_wrong_123",
+        "razorpay_signature": bad,
+        "order_id": order["id"],
+    })
+    assert resp.status_code == 400
+
+    o = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert o["status"] == "PAYMENT_FAILED"
+    assert o["payment_status"] == "FAILED"
+    assert o["razorpay_payment_id"] is None
+
+    payments = (await client.get("/api/payments/")).json()
+    p = next(p for p in payments if p["order_id"] == order["id"])
+    assert p["status"] == "FAILED"
+
+    # Retry after failure is allowed: same order can create a fresh payment flow.
+    r2 = await client.post("/api/payments/create-order", json={"order_id": order["id"]})
+    assert r2.status_code == 200
+
+
+async def test_duplicate_payment_verify_idempotent(client, monkeypatch):
+    """The same callback arriving twice must NOT create a second order or double-charge."""
+    monkeypatch.setattr("routes.payments.RAZORPAY_KEY_SECRET", "test_secret_789")
+    order = await _make_order(client, "spec_dup_1", "p1", 1)
+    rzp_order_id = (await client.post("/api/payments/create-order", json={"order_id": order["id"]})).json()["razorpay_order_id"]
+
+    payment_id = f"pay_dup_{order['id'][:8]}"
+    sig = _razorpay_sig(rzp_order_id, payment_id, "test_secret_789")
+    body = {
+        "razorpay_order_id": rzp_order_id,
+        "razorpay_payment_id": payment_id,
+        "razorpay_signature": sig,
+        "order_id": order["id"],
+    }
+    r1 = await client.post("/api/payments/verify", json=body)
+    assert r1.status_code == 200
+    r2 = await client.post("/api/payments/verify", json=body)
+    assert r2.status_code == 200
+    assert r2.json()["message"] == "Payment already verified"
+
+    # Exactly one CONFIRMED order exists for this session's cart.
+    orders = (await client.get("/api/orders/")).json()["orders"]
+    session_orders = [o for o in orders if o["customer_email"] == "spec_dup_1@test.com"]
+    assert len(session_orders) == 1
+    assert session_orders[0]["status"] == "CONFIRMED"
+
+    # Only one payment row for the order.
+    payments = (await client.get("/api/payments/")).json()
+    order_payments = [p for p in payments if p["order_id"] == order["id"]]
+    assert len(order_payments) == 1
+    assert order_payments[0]["status"] == "PAID"
+
+
+async def test_payment_reuse_across_orders_rejected(client, monkeypatch):
+    """A Razorpay payment ID must map to exactly one successful application order."""
+    monkeypatch.setattr("routes.payments.RAZORPAY_KEY_SECRET", "test_secret_abc")
+    order_a = await _make_order(client, "spec_reuse_a", "p1", 1)
+    rzp_a = (await client.post("/api/payments/create-order", json={"order_id": order_a["id"]})).json()["razorpay_order_id"]
+    payment_a = f"pay_reuse_{order_a['id'][:8]}"
+    await client.post("/api/payments/verify", json={
+        "razorpay_order_id": rzp_a,
+        "razorpay_payment_id": payment_a,
+        "razorpay_signature": _razorpay_sig(rzp_a, payment_a, "test_secret_abc"),
+        "order_id": order_a["id"],
+    })
+
+    # Second order tries to use the same Razorpay payment ID.
+    order_b = await _make_order(client, "spec_reuse_b", "p2", 1)
+    rzp_b = (await client.post("/api/payments/create-order", json={"order_id": order_b["id"]})).json()["razorpay_order_id"]
+    resp = await client.post("/api/payments/verify", json={
+        "razorpay_order_id": rzp_b,
+        "razorpay_payment_id": payment_a,
+        "razorpay_signature": _razorpay_sig(rzp_b, payment_a, "test_secret_abc"),
+        "order_id": order_b["id"],
+    })
+    assert resp.status_code == 409
+
+    # Order B was not marked paid.
+    ob = (await client.get(f"/api/orders/{order_b['id']}")).json()
+    assert ob["status"] != "CONFIRMED"
+
+
+async def test_invalid_amount_rejected(client, monkeypatch):
+    """Server must refuse when the gateway amount does not match the trusted order total."""
+
+    class FakeOrders:
+        def create(self, data):
+            # Return a deliberately wrong amount (trusted total + ₹100).
+            return {"id": "order_fake_amount", "amount": int(data["amount"]) + 10000}
+
+    class FakeClient:
+        order = FakeOrders()
+
+    monkeypatch.setattr("routes.payments.get_razorpay_client", lambda: FakeClient())
+    order = await _make_order(client, "spec_amount_1", "p1", 1)
+    resp = await client.post("/api/payments/create-order", json={"order_id": order["id"]})
+    assert resp.status_code == 500
+    o = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert o["status"] == "PENDING_PAYMENT"  # never paid, still retryable
+
+
+async def test_failed_payment_not_paid_and_retry(client):
+    """Failed payment: not PAID, no duplicate order, clear failure, retry succeeds."""
+    order = await _make_order(client, "spec_fail_1", "p3", 1)
+    rzp = (await client.post("/api/payments/create-order", json={"order_id": order["id"]})).json()
+    payment_internal_id = rzp["payment_id"]
+
+    fail_resp = await client.post(f"/api/payments/demo-fail/{payment_internal_id}")
+    assert fail_resp.status_code == 200
+    assert fail_resp.json()["status"] == "FAILED"
+
+    o = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert o["status"] == "PAYMENT_FAILED"
+    assert o["payment_status"] == "FAILED"
+    assert o["razorpay_payment_id"] is None
+
+    # Only one order record exists for this cart/session.
+    orders = (await client.get("/api/orders/")).json()["orders"]
+    session_orders = [x for x in orders if x["customer_email"] == "spec_fail_1@test.com"]
+    assert len(session_orders) == 1
+
+    # Retry the same order: create-order again then demo success.
+    r2 = await client.post("/api/payments/create-order", json={"order_id": order["id"]})
+    assert r2.status_code == 200
+    ok = await client.post(f"/api/payments/demo-success/{order['id']}")
+    assert ok.status_code == 200
+    o2 = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert o2["status"] == "CONFIRMED"
+    assert o2["payment_status"] == "PAID"
+
+
+async def test_cancelled_payment(client):
+    """User cancels checkout: payment CANCELLED, order CANCELLED, no charge."""
+    order = await _make_order(client, "spec_cancel_1", "p2", 1)
+    rzp = (await client.post("/api/payments/create-order", json={"order_id": order["id"]})).json()
+    resp = await client.post(f"/api/payments/demo-cancel/{rzp['payment_id']}")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "CANCELLED"
+
+    o = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert o["status"] == "CANCELLED"
+    assert o["payment_status"] == "CANCELLED"
+
+
+async def test_cart_order_consistency(client):
+    """Checkout total must match trusted server-side math from catalog prices."""
+    p1 = (await client.get("/api/products/p1")).json()
+    p2 = (await client.get("/api/products/p2")).json()
+    price1, price2 = p1["price"], p2["price"]
+
+    await client.post("/api/carts/session/spec_consist/add",
+                      json={"product_id": "p1", "quantity": 1})
+    await client.post("/api/carts/session/spec_consist/add",
+                      json={"product_id": "p2", "quantity": 2})
+    cart = (await client.get("/api/carts/session/spec_consist")).json()
+    assert cart["total"] == price1 + 2 * price2
+
+    order = (await client.post("/api/orders/checkout", json={
+        "session_id": "spec_consist", "customer_name": "Consistency",
+        "customer_email": "consist@test.com",
+    })).json()
+    subtotal = price1 + 2 * price2
+    expected_tax = round(subtotal * 0.18, 2)
+    expected_shipping = 0 if subtotal >= 500 else 49.0
+    expected_total = round(subtotal + expected_tax + expected_shipping, 2)
+    assert order["subtotal"] == subtotal
+    assert order["tax"] == expected_tax
+    assert order["shipping"] == expected_shipping
+    assert order["total"] == expected_total
+
+
+async def test_audit_trail_full(client):
+    """A complete transaction must write the full audit lifecycle with references."""
+    order = await _make_order(client, "spec_audit_1", "p1", 1)
+    rzp = (await client.post("/api/payments/create-order", json={"order_id": order["id"]})).json()
+    await client.post(f"/api/payments/demo-success/{order['id']}")
+
+    audit = (await client.get("/api/audit/")).json()
+    actions = [a["action"] for a in audit]
+    related = [a for a in audit if a.get("related_entity") == order["id"]]
+
+    for expected in ("CART_CREATED", "CHECKOUT_CREATED", "ORDER_CREATED",
+                     "RAZORPAY_ORDER_CREATED", "PAYMENT_INITIATED",
+                     "PAYMENT_RECEIVED", "PAYMENT_VERIFIED", "ORDER_CONFIRMED"):
+        assert expected in actions, f"missing audit action {expected}"
+
+    # Audit entries carry the razorpay order reference and a decision.
+    rzp_entries = [a for a in related if a.get("payment_reference") == rzp["razorpay_order_id"]]
+    assert rzp_entries, "audit entries must reference the Razorpay order id"
+    assert all(a.get("decision") for a in related)
+
+
+async def test_three_transactions_e2e(client):
+    """Three separate transactions: unique orders, unique Razorpay orders, unique payments, all paid."""
+    tx = []
+    for i, (product, qty) in enumerate([("p1", 1), ("p5", 2), ("p6", 1)]):
+        session = f"spec_tx{i}_"
+        order = await _make_order(client, session, product, qty)
+        rzp = (await client.post("/api/payments/create-order", json={"order_id": order["id"]})).json()
+        ok = await client.post(f"/api/payments/demo-success/{order['id']}")
+        assert ok.status_code == 200
+        final = (await client.get(f"/api/orders/{order['id']}")).json()
+        assert final["status"] == "CONFIRMED"
+        assert final["payment_status"] == "PAID"
+        tx.append({"order": final, "rzp_order": rzp["razorpay_order_id"]})
+
+    # 3 unique application orders, Razorpay order ids, and payment ids.
+    order_ids = [t["order"]["id"] for t in tx]
+    rzp_order_ids = [t["rzp_order"] for t in tx]
+    assert len(set(order_ids)) == 3
+    assert len(set(rzp_order_ids)) == 3
+
+    payments = (await client.get("/api/payments/")).json()
+    tx_payments = [p for p in payments if p["order_id"] in order_ids]
+    assert len(tx_payments) == 3
+    payment_ids = [p["razorpay_payment_id"] for p in tx_payments]
+    assert len(set(payment_ids)) == 3
+    assert all(p["status"] == "PAID" for p in tx_payments)
+
+    # Orders page + dashboard analytics reflect the real transactions.
+    dash = (await client.get("/api/analytics/dashboard")).json()
+    rt = dash["real_transactions"]
+    assert rt["total_orders"] >= 3
+    assert rt["successful_payments"] >= 3
+    assert rt["total_revenue"] > 0
+    assert rt["average_order_value"] > 0
+    assert rt["payment_success_rate"] > 0
+
+    # Real analytics endpoint agrees.
+    analytics = (await client.get("/api/analytics/")).json()
+    assert analytics["total_orders"] >= 3
+    assert analytics["completed_orders"] >= 3
+    assert analytics["total_revenue"] > 0
+
+
+# ==================== Cart lifecycle (spec §6 & §8) ====================
+
+async def test_checkout_idempotent_no_duplicate_order_on_refresh(client):
+    """Refreshing / re-submitting checkout for the same cart must NOT duplicate the order."""
+    session = "spec_reuse_checkout"
+    await client.post(f"/api/carts/session/{session}/add", json={"product_id": "p1", "quantity": 1})
+
+    body = {
+        "session_id": session,
+        "customer_name": "Reuse Tester",
+        "customer_email": "reuse@test.com",
+    }
+    first = await client.post("/api/orders/checkout", json=body)
+    assert first.status_code == 200
+    first_id = first.json()["id"]
+
+    # Same cart, same contents -> the SAME order is returned (no duplicate).
+    second = await client.post("/api/orders/checkout", json=body)
+    assert second.status_code == 200
+    assert second.json()["id"] == first_id
+
+    orders = (await client.get("/api/orders/")).json()["orders"]
+    session_orders = [o for o in orders if o["customer_email"] == "reuse@test.com"]
+    assert len(session_orders) == 1, "refresh must never create a second order"
+
+
+async def test_cart_stays_active_after_checkout_and_on_payment_failure(client):
+    """Cart must remain fully available after checkout and after a failed payment (§8)."""
+    session = "spec_cart_fail"
+    await client.post(f"/api/carts/session/{session}/add", json={"product_id": "p1", "quantity": 1})
+
+    # After checkout the cart is still active with its items (not yet cleared).
+    order = (await client.post("/api/orders/checkout", json={
+        "session_id": session,
+        "customer_name": "Cart Fail",
+        "customer_email": "cartfail@test.com",
+    })).json()
+    cart_after_checkout = (await client.get(f"/api/carts/session/{session}")).json()
+    assert cart_after_checkout["item_count"] == 1, "cart must survive checkout until payment succeeds"
+
+    # Simulate a payment failure -> cart STILL has its items.
+    rzp = (await client.post("/api/payments/create-order", json={"order_id": order["id"]})).json()
+    await client.post(f"/api/payments/demo-fail/{rzp['payment_id']}")
+    cart_after_fail = (await client.get(f"/api/carts/session/{session}")).json()
+    assert cart_after_fail["item_count"] == 1, "failed payment must not clear the cart"
+
+    # The failed order can be retried successfully.
+    ok = await client.post(f"/api/payments/demo-success/{order['id']}")
+    assert ok.status_code == 200
+    final = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert final["status"] == "CONFIRMED"
+    assert final["payment_status"] == "PAID"
+
+    # Only after the verified payment is the cart cleared.
+    cart_after_paid = (await client.get(f"/api/carts/session/{session}")).json()
+    assert cart_after_paid["item_count"] == 0, "successful payment must clear the cart"
+
+
+async def test_cart_survives_payment_cancel(client):
+    """A cancelled checkout must leave the cart available for a fresh attempt (§7/§8)."""
+    session = "spec_cart_cancel"
+    await client.post(f"/api/carts/session/{session}/add", json={"product_id": "p2", "quantity": 2})
+
+    order = (await client.post("/api/orders/checkout", json={
+        "session_id": session,
+        "customer_name": "Cart Cancel",
+        "customer_email": "cartcancel@test.com",
+    })).json()
+    rzp = (await client.post("/api/payments/create-order", json={"order_id": order["id"]})).json()
+    await client.post(f"/api/payments/demo-cancel/{rzp['payment_id']}")
+
+    cancelled = (await client.get(f"/api/orders/{order['id']}")).json()
+    assert cancelled["status"] == "CANCELLED"
+    assert cancelled["payment_status"] == "CANCELLED"
+
+    # Cart remains available; a fresh checkout produces a new order (not a reuse of the cancelled one).
+    cart = (await client.get(f"/api/carts/session/{session}")).json()
+    assert cart["item_count"] == 2
+    fresh = (await client.post("/api/orders/checkout", json={
+        "session_id": session,
+        "customer_name": "Cart Cancel",
+        "customer_email": "cartcancel@test.com",
+    })).json()
+    assert fresh["id"] != order["id"]
+    assert fresh["status"] == "PENDING_PAYMENT"
+
+
+
 

@@ -244,7 +244,7 @@ export default function CommerceChat() {
           </svg>
           <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white"></span>
           {cartCount > 0 && (
-            <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-dark-900">
+            <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
               {cartCount}
             </span>
           )}
@@ -253,9 +253,9 @@ export default function CommerceChat() {
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className={`fixed z-50 ${minimized ? 'bottom-6 right-6' : 'bottom-0 right-0 sm:bottom-6 sm:right-6 sm:w-[420px] sm:h-[620px] w-full h-full sm:rounded-2xl'} bg-dark-900 border border-dark-600 shadow-2xl flex flex-col overflow-hidden transition-all duration-300`}>
+        <div className={`fixed z-50 ${minimized ? 'bottom-6 right-6' : 'bottom-0 right-0 sm:bottom-6 sm:right-6 sm:w-[420px] sm:h-[620px] w-full h-full sm:rounded-2xl'} bg-white border border-slate-200 shadow-2xl flex flex-col overflow-hidden transition-all duration-300`}>
           {/* Header */}
-          <div className="bg-dark-800 border-b border-dark-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -263,22 +263,22 @@ export default function CommerceChat() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Commerce Assistant</h3>
-                <p className="text-[10px] text-dark-400">How can I help you shop today?</p>
+                <h3 className="text-sm font-semibold text-slate-900">Commerce Assistant</h3>
+                <p className="text-[10px] text-slate-500">How can I help you shop today?</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
               {cartCount > 0 && (
-                <a href="/cart" className="flex items-center gap-1 px-2 py-1 rounded-lg bg-dark-700 hover:bg-dark-600 text-dark-200 hover:text-white transition-colors text-[11px]">
+                <a href="/cart" className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 transition-colors text-[11px]">
                   🛒 <span className="font-medium">{cartCount}</span>
                 </a>
               )}
-              <button onClick={clearChat} className="p-1.5 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors" title="Clear chat">
+              <button onClick={clearChat} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors" title="Clear chat">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </button>
-              <button onClick={() => setMinimized(!minimized)} className="p-1.5 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors" title={minimized ? 'Expand' : 'Minimize'}>
+              <button onClick={() => setMinimized(!minimized)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors" title={minimized ? 'Expand' : 'Minimize'}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   {minimized ? (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
@@ -287,7 +287,7 @@ export default function CommerceChat() {
                   )}
                 </svg>
               </button>
-              <button onClick={() => { setIsOpen(false); setMinimized(false) }} className="p-1.5 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors" title="Close">
+              <button onClick={() => { setIsOpen(false); setMinimized(false) }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors" title="Close">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -303,7 +303,7 @@ export default function CommerceChat() {
                   <div className={`max-w-[90%] rounded-xl px-4 py-2.5 ${
                     msg.role === 'user'
                       ? 'bg-primary-600 text-white'
-                      : 'bg-dark-800 border border-dark-700 text-dark-100'
+                      : 'bg-white border border-slate-200 text-slate-800'
                   }`}>
                     <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
 
@@ -312,9 +312,9 @@ export default function CommerceChat() {
                       <div className="mt-3 overflow-x-auto">
                         <div className="flex gap-2 pb-2" style={{ minWidth: 'max-content' }}>
                           {msg.products.slice(0, 5).map(p => (
-                            <div key={p.product_id} className="w-[200px] flex-shrink-0 bg-dark-700/50 rounded-lg border border-dark-600 overflow-hidden">
+                            <div key={p.product_id} className="w-[200px] flex-shrink-0 bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
                               {/* Product Image */}
-                              <div className="relative w-full h-[120px] bg-dark-800 overflow-hidden">
+                              <div className="relative w-full h-[120px] bg-slate-100 overflow-hidden">
                                 <img
                                   src={p.image_url || FALLBACK_IMAGE}
                                   alt={p.name}
@@ -337,24 +337,24 @@ export default function CommerceChat() {
                               </div>
                               {/* Product Info */}
                               <div className="p-2.5">
-                                <p className="text-xs font-medium text-white truncate leading-tight">{p.name}</p>
+                                <p className="text-xs font-medium text-slate-900 truncate leading-tight">{p.name}</p>
                                 {p.brand && (
-                                  <p className="text-[10px] text-dark-400 mt-0.5">{p.brand}</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">{p.brand}</p>
                                 )}
                                 <div className="flex items-center gap-2 mt-1.5">
-                                  <span className="text-sm font-bold text-primary-400">₹{p.price.toLocaleString()}</span>
+                                  <span className="text-sm font-bold text-slate-900">₹{p.price.toLocaleString()}</span>
                                   {hasDiscount(p) && (
-                                    <span className="text-[10px] text-dark-500 line-through">₹{p.previous_price!.toLocaleString()}</span>
+                                    <span className="text-[10px] text-slate-400 line-through">₹{p.previous_price!.toLocaleString()}</span>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
                                   {p.rating ? (
-                                    <span className="text-[10px] text-amber-400">★ {p.rating}</span>
+                                    <span className="text-[10px] text-amber-500">★ {p.rating}</span>
                                   ) : null}
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                    p.stock > 10 ? 'bg-emerald-500/10 text-emerald-400' :
-                                    p.stock > 0 ? 'bg-amber-500/10 text-amber-400' :
-                                    'bg-red-500/10 text-red-400'
+                                    p.stock > 10 ? 'bg-emerald-50 text-emerald-700' :
+                                    p.stock > 0 ? 'bg-amber-50 text-amber-700' :
+                                    'bg-red-50 text-red-700'
                                   }`}>
                                     {p.stock > 0 ? (p.stock <= 10 ? `Only ${p.stock} left` : 'In Stock') : 'Out of stock'}
                                   </span>
@@ -364,7 +364,7 @@ export default function CommerceChat() {
                                   <div className="mt-2.5 flex gap-1.5">
                                     <a
                                       href={`/product?id=${p.product_id}`}
-                                      className="flex-1 text-center text-[10px] px-2 py-1.5 bg-dark-600 hover:bg-dark-500 text-dark-200 rounded transition-colors"
+                                      className="flex-1 text-center text-[10px] px-2 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded transition-colors"
                                     >
                                       View
                                     </a>
@@ -386,16 +386,16 @@ export default function CommerceChat() {
 
                     {/* Cart Info */}
                     {msg.cart && (
-                      <div className="mt-3 p-3 bg-dark-700/50 rounded-lg border border-dark-600">
+                      <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-white">🛒 Cart</span>
-                          <span className="text-sm font-bold text-primary-400">₹{msg.cart.total.toLocaleString()}</span>
+                          <span className="text-sm font-medium text-slate-900">🛒 Cart</span>
+                          <span className="text-sm font-bold text-slate-900">₹{msg.cart.total.toLocaleString()}</span>
                         </div>
-                        <p className="text-xs text-dark-400 mb-2">{msg.cart.item_count} item(s)</p>
+                        <p className="text-xs text-slate-500 mb-2">{msg.cart.item_count} item(s)</p>
                         {msg.cart.items && msg.cart.items.length > 0 && (
                           <div className="space-y-1 mb-2">
                             {msg.cart.items.map((item, i) => (
-                              <div key={i} className="flex justify-between text-[11px] text-dark-300">
+                              <div key={i} className="flex justify-between text-[11px] text-slate-600">
                                 <span className="truncate mr-2">{item.name} × {item.quantity}</span>
                                 <span className="flex-shrink-0">₹{item.subtotal.toLocaleString()}</span>
                               </div>
@@ -415,7 +415,7 @@ export default function CommerceChat() {
                           <button
                             key={i}
                             onClick={() => handleSend(qa.message)}
-                            className="text-[11px] px-2.5 py-1.5 bg-dark-700 hover:bg-dark-600 border border-dark-600 hover:border-primary-500/50 text-dark-200 hover:text-white rounded-lg transition-colors"
+                            className="text-[11px] px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 hover:border-primary-300 text-slate-700 hover:text-slate-900 rounded-lg transition-colors"
                           >
                             {qa.label}
                           </button>
@@ -423,16 +423,16 @@ export default function CommerceChat() {
                       </div>
                     )}
 
-                    <div className="text-[9px] text-dark-500 mt-1.5 text-right">{formatTime(msg.timestamp)}</div>
+                    <div className="text-[9px] text-slate-400 mt-1.5 text-right">{formatTime(msg.timestamp)}</div>
                   </div>
                 </div>
               ))}
 
               {chatLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-dark-800 border border-dark-700 rounded-xl px-4 py-3">
+                  <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-dark-400">Thinking</span>
+                      <span className="text-sm text-slate-500">Thinking</span>
                       <div className="flex gap-1">
                         {[0, 1, 2].map(i => (
                           <div key={i} className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.1}s` }} />
@@ -448,7 +448,7 @@ export default function CommerceChat() {
 
           {/* Input */}
           {!minimized && (
-            <div className="border-t border-dark-700 bg-dark-800 p-3 flex-shrink-0">
+            <div className="border-t border-slate-200 bg-white p-3 flex-shrink-0">
               <div className="flex gap-2">
                 <input
                   ref={inputRef}
@@ -457,18 +457,18 @@ export default function CommerceChat() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
                   placeholder="Ask about products, prices, orders or your cart..."
-                  className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-dark-100 placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                   disabled={chatLoading}
                 />
                 <button
                   onClick={() => handleSend()}
                   disabled={chatLoading || !input.trim()}
-                  className="px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:bg-dark-600 disabled:text-dark-400 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
                 >
                   {chatLoading ? '...' : 'Send'}
                 </button>
               </div>
-              <p className="text-[9px] text-dark-500 text-center mt-1.5">Commerce Assistant · No AI API required</p>
+              <p className="text-[9px] text-slate-400 text-center mt-1.5">Commerce Assistant · No AI API required</p>
             </div>
           )}
         </div>

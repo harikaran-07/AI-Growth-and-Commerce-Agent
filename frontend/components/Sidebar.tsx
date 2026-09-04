@@ -38,9 +38,9 @@ export default function Sidebar() {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="p-4 border-b border-dark-700">
+      <div className="p-4 border-b border-dark-800">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-lg bg-primary-600 flex items-center justify-center">
             <span className="text-white font-bold text-lg">A</span>
           </div>
           <div>
@@ -60,8 +60,8 @@ export default function Sidebar() {
               href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-primary-600/20 text-primary-300 border border-primary-500/20'
-                  : 'text-dark-300 hover:bg-dark-700 hover:text-white border border-transparent'
+                  ? 'bg-primary-900 text-white border border-primary-600/40'
+                  : 'text-dark-300 hover:bg-dark-800 hover:text-white border border-transparent'
               }`}
             >
               <span className={`text-base ${isActive ? item.color : 'text-dark-400'}`}>{item.icon}</span>

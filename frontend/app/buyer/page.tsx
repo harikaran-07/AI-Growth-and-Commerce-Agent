@@ -343,7 +343,7 @@ export default function BuyerPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Header */}
-      <div className="bg-dark-800 border-b border-dark-700 px-6 py-3 flex-shrink-0">
+      <div className="bg-white border-b border-slate-200 px-6 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
@@ -352,17 +352,17 @@ export default function BuyerPage() {
               </svg>
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-white">Commerce Assistant</h1>
-              <p className="text-[10px] text-dark-400">How can I help you shop today?</p>
+              <h1 className="text-sm font-semibold text-slate-900">Commerce Assistant</h1>
+              <p className="text-[10px] text-slate-500">How can I help you shop today?</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {cartCount > 0 && (
-              <a href="/cart" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-dark-200 hover:text-white transition-colors text-xs">
+              <a href="/cart" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 transition-colors text-xs">
                 🛒 <span className="font-medium">{cartCount}</span>
               </a>
             )}
-            <button onClick={clearChat} className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors" title="Clear chat">
+            <button onClick={clearChat} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors" title="Clear chat">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
@@ -378,7 +378,7 @@ export default function BuyerPage() {
             <div className={`max-w-3xl rounded-xl px-4 py-3 ${
               msg.role === 'user'
                 ? 'bg-primary-600 text-white'
-                : 'bg-dark-800 border border-dark-700 text-dark-100'
+                : 'bg-white border border-slate-200 text-slate-800'
             }`}>
               <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
 
@@ -387,9 +387,9 @@ export default function BuyerPage() {
                 <div className="mt-3 overflow-x-auto">
                   <div className="flex gap-3 pb-2" style={{ minWidth: 'max-content' }}>
                     {msg.products.slice(0, 5).map(p => (
-                      <div key={p.product_id} className="w-[220px] flex-shrink-0 bg-dark-700/50 rounded-lg border border-dark-600 overflow-hidden">
+                      <div key={p.product_id} className="w-[220px] flex-shrink-0 bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
                         {/* Product Image */}
-                        <div className="relative w-full h-[130px] bg-dark-800 overflow-hidden">
+                        <div className="relative w-full h-[130px] bg-slate-100 overflow-hidden">
                           <img
                             src={p.image_url || FALLBACK_IMAGE}
                             alt={p.name}
@@ -412,27 +412,27 @@ export default function BuyerPage() {
                         </div>
                         {/* Product Info */}
                         <div className="p-3">
-                          <p className="text-sm font-medium text-white truncate leading-tight">{sanitizeProductName(p.name)}</p>
+                          <p className="text-sm font-medium text-slate-900 truncate leading-tight">{sanitizeProductName(p.name)}</p>
                           {p.brand && (
-                            <p className="text-[11px] text-dark-400 mt-0.5">{p.brand}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">{p.brand}</p>
                           )}
                           {p.reason && (
-                            <p className="text-[10px] text-primary-400/90 leading-snug mt-1">💡 {p.reason}</p>
+                            <p className="text-[10px] text-violet-600 leading-snug mt-1">💡 {p.reason}</p>
                           )}
                           <div className="flex items-center gap-2 mt-2">
-                            <span className="text-base font-bold text-primary-400">₹{p.price.toLocaleString()}</span>
+                            <span className="text-base font-bold text-slate-900">₹{p.price.toLocaleString()}</span>
                             {hasDiscount(p) && (
-                              <span className="text-[11px] text-dark-500 line-through">₹{p.previous_price!.toLocaleString()}</span>
+                              <span className="text-[11px] text-slate-400 line-through">₹{p.previous_price!.toLocaleString()}</span>
                             )}
                           </div>
                           <div className="flex items-center gap-2 mt-1">
                             {p.rating ? (
-                              <span className="text-[11px] text-amber-400">★ {p.rating}</span>
+                              <span className="text-[11px] text-amber-500">★ {p.rating}</span>
                             ) : null}
                             <span className={`text-[11px] px-1.5 py-0.5 rounded ${
-                              p.stock > 10 ? 'bg-emerald-500/10 text-emerald-400' :
-                              p.stock > 0 ? 'bg-amber-500/10 text-amber-400' :
-                              'bg-red-500/10 text-red-400'
+                              p.stock > 10 ? 'bg-emerald-50 text-emerald-700' :
+                              p.stock > 0 ? 'bg-amber-50 text-amber-700' :
+                              'bg-red-50 text-red-700'
                             }`}>
                               {p.stock > 0 ? (p.stock <= 10 ? `Only ${p.stock} left` : 'In Stock') : 'Out of stock'}
                             </span>
@@ -442,7 +442,7 @@ export default function BuyerPage() {
                             <div className="mt-3 flex gap-2">
                               <a
                                 href={`/product?id=${p.product_id}`}
-                                className="flex-1 text-center text-[11px] px-3 py-2 bg-dark-600 hover:bg-dark-500 text-dark-200 rounded-lg transition-colors"
+                                className="flex-1 text-center text-[11px] px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg transition-colors"
                               >
                                 View
                               </a>
@@ -464,16 +464,16 @@ export default function BuyerPage() {
 
               {/* Cart Info */}
               {msg.cart && (
-                <div className="mt-3 p-4 bg-dark-700/50 rounded-lg border border-dark-600">
+                <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-white">🛒 Cart</span>
-                    <span className="text-sm font-bold text-primary-400">₹{msg.cart.total.toLocaleString()}</span>
+                    <span className="text-sm font-medium text-slate-900">🛒 Cart</span>
+                    <span className="text-sm font-bold text-slate-900">₹{msg.cart.total.toLocaleString()}</span>
                   </div>
-                  <p className="text-xs text-dark-400 mb-2">{msg.cart.item_count} item(s)</p>
+                  <p className="text-xs text-slate-500 mb-2">{msg.cart.item_count} item(s)</p>
                   {msg.cart.items && msg.cart.items.length > 0 && (
                     <div className="space-y-1 mb-3">
                       {msg.cart.items.map((item, i) => (
-                        <div key={i} className="flex justify-between text-xs text-dark-300">
+                        <div key={i} className="flex justify-between text-xs text-slate-600">
                           <span className="truncate mr-2">{item.name} × {item.quantity}</span>
                           <span className="flex-shrink-0">₹{item.subtotal.toLocaleString()}</span>
                         </div>
@@ -488,16 +488,16 @@ export default function BuyerPage() {
 
               {/* Payment / Checkout Info */}
               {msg.payment && (
-                <div className="mt-3 p-4 bg-dark-700/50 rounded-lg border border-dark-600">
+                <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-white">💳 Checkout</span>
-                    <span className="text-sm font-bold text-primary-400">₹{msg.payment.total.toLocaleString()}</span>
+                    <span className="text-sm font-medium text-slate-900">💳 Checkout</span>
+                    <span className="text-sm font-bold text-slate-900">₹{msg.payment.total.toLocaleString()}</span>
                   </div>
-                  <p className="text-xs text-dark-400 mb-2">Order #{msg.payment.order_id.slice(0, 8).toUpperCase()} · Razorpay TEST MODE</p>
+                  <p className="text-xs text-slate-500 mb-2">Order #{msg.payment.order_id.slice(0, 8).toUpperCase()} · Razorpay TEST MODE</p>
                   {msg.payment.items && msg.payment.items.length > 0 && (
                     <div className="space-y-1 mb-2">
                       {msg.payment.items.map((item, i) => (
-                        <div key={i} className="flex justify-between text-xs text-dark-300">
+                        <div key={i} className="flex justify-between text-xs text-slate-600">
                           <span className="truncate mr-2">{item.product_name} × {item.quantity}</span>
                           <span className="flex-shrink-0">₹{item.subtotal.toLocaleString()}</span>
                         </div>
@@ -505,22 +505,22 @@ export default function BuyerPage() {
                     </div>
                   )}
                   <div className="space-y-1 text-xs mb-3">
-                    <div className="flex justify-between text-dark-400"><span>Subtotal</span><span>₹{msg.payment.subtotal.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>₹{msg.payment.subtotal.toLocaleString()}</span></div>
                     {msg.payment.discount > 0 && (
-                      <div className="flex justify-between text-emerald-400"><span>Discount</span><span>-₹{msg.payment.discount.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-emerald-600"><span>Discount</span><span>-₹{msg.payment.discount.toLocaleString()}</span></div>
                     )}
-                    <div className="flex justify-between text-dark-400"><span>Tax (18%)</span><span>₹{msg.payment.tax.toLocaleString()}</span></div>
-                    <div className="flex justify-between text-dark-400"><span>Shipping</span><span>{msg.payment.shipping === 0 ? 'Free' : `₹${msg.payment.shipping}`}</span></div>
-                    <div className="flex justify-between border-t border-dark-600 pt-1 text-white font-semibold"><span>Total</span><span>₹{msg.payment.total.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-slate-500"><span>Tax (18%)</span><span>₹{msg.payment.tax.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-slate-500"><span>Shipping</span><span>{msg.payment.shipping === 0 ? 'Free' : `₹${msg.payment.shipping}`}</span></div>
+                    <div className="flex justify-between border-t border-slate-200 pt-1 text-slate-900 font-semibold"><span>Total</span><span>₹{msg.payment.total.toLocaleString()}</span></div>
                   </div>
                   <button
                     onClick={() => payWithRazorpay(msg)}
                     disabled={payingOrder === msg.payment.order_id}
-                    className="w-full text-xs px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-dark-600 text-white rounded-lg transition-colors font-medium"
+                    className="w-full text-xs px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white rounded-lg transition-colors font-medium"
                   >
                     {payingOrder === msg.payment.order_id ? '⏳ Processing...' : '💳 Pay with Razorpay'}
                   </button>
-                  <p className="text-[10px] text-dark-500 text-center mt-1.5">TEST MODE — No real money charged</p>
+                  <p className="text-[10px] text-slate-400 text-center mt-1.5">TEST MODE — No real money charged</p>
                 </div>
               )}
 
@@ -531,7 +531,7 @@ export default function BuyerPage() {
                     <button
                       key={i}
                       onClick={() => handleSend(qa.message)}
-                      className="text-xs px-3 py-2 bg-dark-700 hover:bg-dark-600 border border-dark-600 hover:border-primary-500/50 text-dark-200 hover:text-white rounded-lg transition-colors"
+                      className="text-xs px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-primary-300 text-slate-700 hover:text-slate-900 rounded-lg transition-colors"
                     >
                       {qa.label}
                     </button>
@@ -539,16 +539,16 @@ export default function BuyerPage() {
                 </div>
               )}
 
-              <div className="text-[10px] text-dark-500 mt-2 text-right">{formatTime(msg.timestamp)}</div>
+              <div className="text-[10px] text-slate-400 mt-2 text-right">{formatTime(msg.timestamp)}</div>
             </div>
           </div>
         ))}
 
         {chatLoading && (
           <div className="flex justify-start">
-            <div className="bg-dark-800 border border-dark-700 rounded-xl px-4 py-3">
+            <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-dark-400">Thinking</span>
+                <span className="text-sm text-slate-500">Thinking</span>
                 <div className="flex gap-1">
                   {[0, 1, 2].map(i => (
                     <div key={i} className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.1}s` }} />
@@ -562,7 +562,7 @@ export default function BuyerPage() {
       </div>
 
       {/* Input */}
-      <div className="border-t border-dark-700 bg-dark-800 p-4 flex-shrink-0">
+      <div className="border-t border-slate-200 bg-white p-4 flex-shrink-0">
         <div className="flex gap-2 max-w-3xl mx-auto">
           <input
             ref={inputRef}
@@ -571,18 +571,18 @@ export default function BuyerPage() {
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder="Ask about products, prices, orders or your cart..."
-            className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-dark-100 placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+            className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
             disabled={chatLoading}
           />
           <button
             onClick={() => handleSend()}
             disabled={chatLoading || !input.trim()}
-            className="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 disabled:bg-dark-600 disabled:text-dark-400 text-white rounded-lg text-sm font-medium transition-colors"
+            className="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
           >
             {chatLoading ? '...' : 'Send'}
           </button>
         </div>
-        <p className="text-[10px] text-dark-500 text-center mt-2">Commerce Assistant · No AI API required</p>
+        <p className="text-[10px] text-slate-400 text-center mt-2">Commerce Assistant · No AI API required</p>
       </div>
     </div>
   )

@@ -117,13 +117,13 @@ function ProductDetailContent() {
     return (
       <div className="p-6 lg:p-8 max-w-6xl mx-auto">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-dark-700 rounded w-1/4"></div>
+          <div className="h-8 bg-slate-200/70 rounded w-1/4"></div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="h-96 bg-dark-800 rounded-xl"></div>
+            <div className="h-96 bg-slate-200/70 rounded-xl"></div>
             <div className="space-y-4">
-              <div className="h-6 bg-dark-700 rounded w-3/4"></div>
-              <div className="h-4 bg-dark-700 rounded w-1/2"></div>
-              <div className="h-10 bg-dark-700 rounded w-1/3"></div>
+              <div className="h-6 bg-slate-200/70 rounded w-3/4"></div>
+              <div className="h-4 bg-slate-200/70 rounded w-1/2"></div>
+              <div className="h-10 bg-slate-200/70 rounded w-1/3"></div>
             </div>
           </div>
         </div>
@@ -135,8 +135,8 @@ function ProductDetailContent() {
     return (
       <div className="p-6 lg:p-8 text-center">
         <div className="text-6xl mb-4">📦</div>
-        <h2 className="text-xl font-bold text-white mb-2">Product Not Found</h2>
-        <p className="text-dark-400 text-sm mb-4">The product you're looking for doesn't exist or has been removed.</p>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">Product Not Found</h2>
+        <p className="text-slate-500 text-sm mb-4">The product you're looking for doesn't exist or has been removed.</p>
         <a href="/products" className="btn-primary">Browse Products</a>
       </div>
     )
@@ -149,20 +149,20 @@ function ProductDetailContent() {
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-dark-400 mb-6">
-        <a href="/" className="hover:text-white transition-colors">Home</a>
+      <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
+        <a href="/" className="hover:text-primary-600 transition-colors">Home</a>
         <span>/</span>
-        <a href="/products" className="hover:text-white transition-colors">Products</a>
+        <a href="/products" className="hover:text-primary-600 transition-colors">Products</a>
         <span>/</span>
-        <a href={`/products?category=${product.category}`} className="hover:text-white transition-colors">{product.category}</a>
+        <a href={`/products?category=${product.category}`} className="hover:text-primary-600 transition-colors">{product.category}</a>
         <span>/</span>
-        <span className="text-dark-200">{sanitizeProductName(product.name)}</span>
+        <span className="text-slate-700">{sanitizeProductName(product.name)}</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
         {/* Product Image */}
-        <div className="bg-dark-800 border border-dark-700 rounded-xl overflow-hidden">
-          <div className="aspect-square flex items-center justify-center bg-gradient-to-br from-dark-700 to-dark-800">
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="aspect-square flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200/70">
             {product.image_url ? (
               <img
                 src={product.image_url}
@@ -184,11 +184,11 @@ function ProductDetailContent() {
         <div className="flex flex-col">
           {/* Brand */}
           {product.brand && (
-            <p className="text-xs text-primary-400 font-medium uppercase tracking-wider mb-2">{product.brand}</p>
+            <p className="text-xs text-primary-600 font-medium uppercase tracking-wider mb-2">{product.brand}</p>
           )}
 
           {/* Name */}
-          <h1 className="text-2xl lg:text-3xl font-bold text-white mb-3 leading-tight">
+          <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 mb-3 leading-tight">
             {sanitizeProductName(product.name)}
           </h1>
 
@@ -196,19 +196,19 @@ function ProductDetailContent() {
           <div className="flex items-center gap-3 mb-4">
             <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map(star => (
-                <span key={star} className={`text-lg ${star <= Math.round(product.rating || 0) ? 'text-amber-400' : 'text-dark-600'}`}>★</span>
+                <span key={star} className={`text-lg ${star <= Math.round(product.rating || 0) ? 'text-amber-500' : 'text-slate-300'}`}>★</span>
               ))}
-              <span className="text-sm text-dark-300 ml-2">{product.rating?.toFixed(1) || '0.0'}</span>
+              <span className="text-sm text-slate-600 ml-2">{product.rating?.toFixed(1) || '0.0'}</span>
             </div>
-            <span className="text-xs text-dark-500">({product.sales || 0} sold)</span>
+            <span className="text-xs text-slate-400">({product.sales || 0} sold)</span>
           </div>
 
           {/* Price */}
           <div className="flex items-baseline gap-3 mb-4">
-            <span className="text-3xl font-bold text-white">{formatPrice(product.price)}</span>
+            <span className="text-3xl font-bold text-slate-900">{formatPrice(product.price)}</span>
             {product.previous_price && product.previous_price > product.price && (
               <>
-                <span className="text-lg text-dark-500 line-through">{formatPrice(product.previous_price)}</span>
+                <span className="text-lg text-slate-400 line-through">{formatPrice(product.previous_price)}</span>
                 <span className="badge-danger text-xs">{discount}% OFF</span>
               </>
             )}
@@ -227,32 +227,32 @@ function ProductDetailContent() {
 
           {/* Description */}
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-white mb-2">Description</h3>
-            <p className="text-sm text-dark-300 leading-relaxed">{product.description}</p>
+            <h3 className="text-sm font-semibold text-slate-900 mb-2">Description</h3>
+            <p className="text-sm text-slate-600 leading-relaxed">{product.description}</p>
           </div>
 
           {/* Specifications */}
           <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="bg-dark-700/50 rounded-lg p-3">
-              <p className="text-[10px] text-dark-400 mb-1">Category</p>
-              <p className="text-sm font-medium text-white">{product.category}</p>
+            <div className="bg-slate-100 rounded-lg p-3">
+              <p className="text-[10px] text-slate-500 mb-1">Category</p>
+              <p className="text-sm font-medium text-slate-900">{product.category}</p>
             </div>
             {product.subcategory && (
-              <div className="bg-dark-700/50 rounded-lg p-3">
-                <p className="text-[10px] text-dark-400 mb-1">Subcategory</p>
-                <p className="text-sm font-medium text-white">{product.subcategory}</p>
+              <div className="bg-slate-100 rounded-lg p-3">
+                <p className="text-[10px] text-slate-500 mb-1">Subcategory</p>
+                <p className="text-sm font-medium text-slate-900">{product.subcategory}</p>
               </div>
             )}
             {product.sku && (
-              <div className="bg-dark-700/50 rounded-lg p-3">
-                <p className="text-[10px] text-dark-400 mb-1">SKU</p>
-                <p className="text-sm font-medium text-white font-mono">{product.sku}</p>
+              <div className="bg-slate-100 rounded-lg p-3">
+                <p className="text-[10px] text-slate-500 mb-1">SKU</p>
+                <p className="text-sm font-medium text-slate-900 font-mono">{product.sku}</p>
               </div>
             )}
             {product.tags && (
-              <div className="bg-dark-700/50 rounded-lg p-3">
-                <p className="text-[10px] text-dark-400 mb-1">Tags</p>
-                <p className="text-sm font-medium text-white">{product.tags}</p>
+              <div className="bg-slate-100 rounded-lg p-3">
+                <p className="text-[10px] text-slate-500 mb-1">Tags</p>
+                <p className="text-sm font-medium text-slate-900">{product.tags}</p>
               </div>
             )}
           </div>
@@ -260,22 +260,22 @@ function ProductDetailContent() {
           {/* Quantity & Add to Cart */}
           {product.stock > 0 && (
             <div className="flex items-center gap-4 mb-4">
-              <div className="flex items-center border border-dark-600 rounded-lg overflow-hidden">
+              <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
                 <button
                   onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                  className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 text-white transition-colors"
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-900 transition-colors"
                 >
                   −
                 </button>
-                <span className="px-4 py-2.5 text-white font-medium min-w-[48px] text-center">{quantity}</span>
+                <span className="px-4 py-2.5 text-slate-900 font-medium min-w-[48px] text-center">{quantity}</span>
                 <button
                   onClick={() => setQuantity(q => Math.min(product.stock, q + 1))}
-                  className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 text-white transition-colors"
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-900 transition-colors"
                 >
                   +
                 </button>
               </div>
-              <span className="text-xs text-dark-400">{product.stock} available</span>
+              <span className="text-xs text-slate-500">{product.stock} available</span>
             </div>
           )}
 
@@ -300,8 +300,8 @@ function ProductDetailContent() {
           {cartMessage && (
             <div className={`mt-3 p-3 rounded-lg text-sm ${
               cartMessage.includes('Failed')
-                ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                ? 'bg-red-50 text-red-700 border border-red-200'
+                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
             }`}>
               {cartMessage}
             </div>
@@ -309,16 +309,16 @@ function ProductDetailContent() {
 
           {/* Delivery Info */}
           <div className="mt-6 space-y-2">
-            <div className="flex items-center gap-2 text-sm text-dark-300">
-              <span className="text-emerald-400">✓</span>
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <span className="text-emerald-600">✓</span>
               <span>Free delivery on orders above ₹500</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-dark-300">
-              <span className="text-emerald-400">✓</span>
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <span className="text-emerald-600">✓</span>
               <span>7-day return policy</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-dark-300">
-              <span className="text-emerald-400">✓</span>
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <span className="text-emerald-600">✓</span>
               <span>Secure payment via Razorpay</span>
             </div>
           </div>
@@ -327,10 +327,10 @@ function ProductDetailContent() {
 
       {/* AI Product Assistant */}
       <div className="card p-6 mb-8">
-        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-          <span className="text-purple-400">🤖</span> Ask AI about this product
+        <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <span className="text-ai-600">🤖</span> Ask AI about this product
         </h3>
-        <p className="text-sm text-dark-400 mb-4">
+        <p className="text-sm text-slate-500 mb-4">
           Ask questions like &quot;Is this suitable for me?&quot;, &quot;What accessories go with this?&quot;, or &quot;Compare with similar products&quot;
         </p>
         <div className="flex gap-2 mb-4">
@@ -348,9 +348,9 @@ function ProductDetailContent() {
           </button>
         </div>
         {aiAnswer && (
-          <div className="bg-dark-700/50 rounded-lg p-4 border border-dark-600">
-            <p className="text-sm text-dark-200 whitespace-pre-wrap leading-relaxed">{aiAnswer}</p>
-            <p className="text-[10px] text-dark-500 mt-2 italic">AI-generated response — verify critical information</p>
+          <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{aiAnswer}</p>
+            <p className="text-[10px] text-slate-400 mt-2 italic">AI-generated response — verify critical information</p>
           </div>
         )}
       </div>
@@ -358,7 +358,7 @@ function ProductDetailContent() {
       {/* Related Products */}
       {relatedProducts.length > 0 && (
         <div className="mb-8">
-          <h3 className="text-lg font-bold text-white mb-4">Related Products</h3>
+          <h3 className="text-lg font-bold text-slate-900 mb-4">Related Products</h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {relatedProducts.map(p => (
               <a
@@ -366,7 +366,7 @@ function ProductDetailContent() {
                 href={`/product?id=${p.id}`}
                 className="card-hover p-4 flex flex-col"
               >
-                <div className="h-28 bg-dark-700 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                <div className="h-28 bg-slate-100 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                   {p.image_url ? (
                     <img
                       src={p.image_url}
@@ -383,13 +383,13 @@ function ProductDetailContent() {
                     <span className="text-2xl">📦</span>
                   )}
                 </div>
-                <h4 className="font-medium text-white text-sm truncate mb-1">{sanitizeProductName(p.name)}</h4>
+                <h4 className="font-medium text-slate-900 text-sm truncate mb-1">{sanitizeProductName(p.name)}</h4>
                 <div className="flex items-center gap-1 mb-2">
-                  <span className="text-xs text-amber-400">★</span>
-                  <span className="text-xs text-dark-300">{p.rating?.toFixed(1) || '-'}</span>
+                  <span className="text-xs text-amber-500">★</span>
+                  <span className="text-xs text-slate-600">{p.rating?.toFixed(1) || '-'}</span>
                 </div>
                 <div className="mt-auto">
-                  <span className="text-lg font-bold text-primary-400">{formatPrice(p.price)}</span>
+                  <span className="text-lg font-bold text-primary-700">{formatPrice(p.price)}</span>
                 </div>
               </a>
             ))}
@@ -402,7 +402,7 @@ function ProductDetailContent() {
 
 export default function ProductDetailPage() {
   return (
-    <Suspense fallback={<div className="p-6 lg:p-8 max-w-6xl mx-auto"><div className="animate-pulse space-y-6"><div className="h-8 bg-dark-700 rounded w-1/4"></div><div className="h-96 bg-dark-800 rounded-xl"></div></div></div>}>
+    <Suspense fallback={<div className="p-6 lg:p-8 max-w-6xl mx-auto"><div className="animate-pulse space-y-6"><div className="h-8 bg-slate-200/70 rounded w-1/4"></div><div className="h-96 bg-slate-200/70 rounded-xl"></div></div></div>}>
       <ProductDetailContent />
     </Suspense>
   )

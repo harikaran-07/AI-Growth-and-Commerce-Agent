@@ -239,8 +239,8 @@ export default function CartPage() {
     return (
       <div className="p-6 lg:p-8">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-dark-700 rounded w-1/4"></div>
-          <div className="h-64 bg-dark-800 rounded-lg"></div>
+          <div className="h-8 bg-slate-200/70 rounded w-1/4"></div>
+          <div className="h-64 bg-slate-200/70 rounded-lg"></div>
         </div>
       </div>
     )
@@ -253,9 +253,9 @@ export default function CartPage() {
       {step === 'success' ? (
         <div className="card p-8 text-center">
           <div className="text-6xl mb-4">✅</div>
-          <h2 className="text-2xl font-bold text-white mb-2">Payment Successful!</h2>
-          <p className="text-dark-300 mb-1">Order #{orderResult?.id.slice(0, 8)}</p>
-          <p className="text-dark-400 text-sm mb-6">Total: ₹{orderResult?.total.toLocaleString()}</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment Successful!</h2>
+          <p className="text-slate-600 mb-1">Order #{orderResult?.id.slice(0, 8)}</p>
+          <p className="text-slate-500 text-sm mb-6">Total: ₹{orderResult?.total.toLocaleString()}</p>
           <div className="flex gap-3 justify-center">
             <a href="/orders" className="btn-primary">View Orders</a>
             <a href="/products" className="btn-secondary">Continue Shopping</a>
@@ -264,58 +264,58 @@ export default function CartPage() {
       ) : step === 'failed' ? (
         <div className="card p-8 text-center">
           <div className="text-6xl mb-4">❌</div>
-          <h2 className="text-2xl font-bold text-white mb-2">Payment Failed</h2>
-          <p className="text-red-400 text-sm mb-6">{paymentError || 'Unknown error'}</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment Failed</h2>
+          <p className="text-red-600 text-sm mb-6">{paymentError || 'Unknown error'}</p>
           <button onClick={() => { setStep('cart'); setPaymentError('') }} className="btn-primary">Try Again</button>
         </div>
       ) : step === 'payment' && orderResult ? (
         <div className="card p-6">
-          <h2 className="text-xl font-bold text-white mb-4">Complete Payment</h2>
-          <div className="bg-dark-700 rounded-lg p-4 mb-4">
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Complete Payment</h2>
+          <div className="bg-slate-100 rounded-lg p-4 mb-4">
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-dark-400">Order ID</span><span className="text-white font-mono">{orderResult.id.slice(0, 12)}...</span></div>
-              <div className="flex justify-between"><span className="text-dark-400">Subtotal</span><span className="text-white">₹{orderResult.subtotal.toLocaleString()}</span></div>
-              {orderResult.discount > 0 && <div className="flex justify-between"><span className="text-dark-400">Discount</span><span className="text-emerald-400">-₹{orderResult.discount.toLocaleString()}</span></div>}
-              <div className="flex justify-between"><span className="text-dark-400">Tax (18%)</span><span className="text-white">₹{orderResult.tax.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-dark-400">Shipping</span><span className="text-white">{orderResult.shipping === 0 ? 'Free' : `₹${orderResult.shipping}`}</span></div>
-              <div className="flex justify-between border-t border-dark-600 pt-2"><span className="text-white font-semibold">Total</span><span className="text-primary-400 font-bold text-lg">₹{orderResult.total.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Order ID</span><span className="text-slate-900 font-mono">{orderResult.id.slice(0, 12)}...</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span className="text-slate-900">₹{orderResult.subtotal.toLocaleString()}</span></div>
+              {orderResult.discount > 0 && <div className="flex justify-between"><span className="text-slate-500">Discount</span><span className="text-emerald-600">-₹{orderResult.discount.toLocaleString()}</span></div>}
+              <div className="flex justify-between"><span className="text-slate-500">Tax (18%)</span><span className="text-slate-900">₹{orderResult.tax.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Shipping</span><span className="text-slate-900">{orderResult.shipping === 0 ? 'Free' : `₹${orderResult.shipping}`}</span></div>
+              <div className="flex justify-between border-t border-slate-200 pt-2"><span className="text-slate-900 font-semibold">Total</span><span className="text-primary-700 font-bold text-lg">₹{orderResult.total.toLocaleString()}</span></div>
             </div>
           </div>
 
           {paymentError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg mb-4">{String(paymentError)}</div>
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-lg mb-4">{String(paymentError)}</div>
           )}
 
           <button onClick={initRazorpay} disabled={processing} className="btn-success w-full py-3 text-base">
             {processing ? '⏳ Processing...' : '💳 Pay with Razorpay'}
           </button>
-          <p className="text-[10px] text-dark-500 text-center mt-2">TEST MODE — No real money charged</p>
+          <p className="text-[10px] text-slate-400 text-center mt-2">TEST MODE — No real money charged</p>
         </div>
       ) : step === 'checkout' ? (
         <div className="card p-6">
-          <h2 className="text-xl font-bold text-white mb-4">Checkout</h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Checkout</h2>
           <div className="space-y-3 mb-6">
             <div>
-              <label className="text-xs text-dark-400 mb-1 block">Full Name *</label>
+              <label className="text-xs text-slate-500 mb-1 block">Full Name *</label>
               <input type="text" value={checkoutData.name} onChange={e => setCheckoutData({...checkoutData, name: e.target.value})} className="input" placeholder="John Doe" />
             </div>
             <div>
-              <label className="text-xs text-dark-400 mb-1 block">Email *</label>
+              <label className="text-xs text-slate-500 mb-1 block">Email *</label>
               <input type="email" value={checkoutData.email} onChange={e => setCheckoutData({...checkoutData, email: e.target.value})} className="input" placeholder="john@example.com" />
             </div>
             <div>
-              <label className="text-xs text-dark-400 mb-1 block">Phone</label>
+              <label className="text-xs text-slate-500 mb-1 block">Phone</label>
               <input type="tel" value={checkoutData.phone} onChange={e => setCheckoutData({...checkoutData, phone: e.target.value})} className="input" placeholder="+91 9876543210" />
             </div>
             <div>
-              <label className="text-xs text-dark-400 mb-1 block">Address</label>
+              <label className="text-xs text-slate-500 mb-1 block">Address</label>
               <input type="text" value={checkoutData.address} onChange={e => setCheckoutData({...checkoutData, address: e.target.value})} className="input" placeholder="123 Main St, City" />
             </div>
           </div>
-          <div className="bg-dark-700 rounded-lg p-3 mb-4">
-            <div className="flex justify-between text-sm"><span className="text-dark-300">Total</span><span className="text-primary-400 font-bold">₹{cart?.total.toLocaleString()}</span></div>
+          <div className="bg-slate-100 rounded-lg p-3 mb-4">
+            <div className="flex justify-between text-sm"><span className="text-slate-600">Total</span><span className="text-primary-700 font-bold">₹{cart?.total.toLocaleString()}</span></div>
           </div>
-          {paymentError && <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg mb-4">{String(paymentError)}</div>}
+          {paymentError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-lg mb-4">{String(paymentError)}</div>}
           <div className="flex gap-2">
             <button onClick={handleCheckout} disabled={processing} className="btn-primary flex-1 py-3">{processing ? 'Processing...' : 'Place Order →'}</button>
             <button onClick={() => { setStep('cart'); setPaymentError('') }} className="btn-secondary">Back</button>
@@ -324,16 +324,16 @@ export default function CartPage() {
       ) : isEmpty ? (
         <div className="card p-12 text-center">
           <div className="text-6xl mb-4">🛒</div>
-          <h2 className="text-xl font-semibold text-white mb-2">Your cart is empty</h2>
-          <p className="text-dark-400 text-sm mb-6">Browse our catalog and add some products!</p>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Your cart is empty</h2>
+          <p className="text-slate-500 text-sm mb-6">Browse our catalog and add some products!</p>
           <a href="/products" className="btn-primary inline-block">Browse Products</a>
         </div>
       ) : (
         <>
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-white">Shopping Cart</h1>
-              <p className="text-dark-400 text-sm mt-1">{cart!.item_count} items</p>
+              <h1 className="text-2xl font-bold text-slate-900">Shopping Cart</h1>
+              <p className="text-slate-500 text-sm mt-1">{cart!.item_count} items</p>
             </div>
             <button onClick={clearCart} className="btn-danger text-xs">Clear Cart</button>
           </div>
@@ -342,7 +342,7 @@ export default function CartPage() {
             <div className="lg:col-span-2 space-y-3">
               {cart!.items.map(item => (
                 <div key={item.id} className="card p-4 flex items-center gap-4">
-                  <a href={`/product?id=${item.product_id}`} className="w-16 h-16 bg-dark-700 rounded-lg flex-shrink-0 overflow-hidden">
+                  <a href={`/product?id=${item.product_id}`} className="w-16 h-16 bg-slate-100 rounded-lg flex-shrink-0 overflow-hidden">
                     {item.image_url ? (
                       <img
                         src={item.image_url}
@@ -355,44 +355,44 @@ export default function CartPage() {
                         }}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-dark-700">
+                      <div className="w-full h-full flex items-center justify-center bg-slate-100">
                         <span className="text-2xl">📦</span>
                       </div>
                     )}
                   </a>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-white text-sm truncate">{sanitizeProductName(item.product_name)}</h3>
-                    <p className="text-xs text-dark-400">₹{item.price_at_time.toLocaleString()} each</p>
+                    <h3 className="font-medium text-slate-900 text-sm truncate">{sanitizeProductName(item.product_name)}</h3>
+                    <p className="text-xs text-slate-500">₹{item.price_at_time.toLocaleString()} each</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
-                      className="w-8 h-8 bg-dark-700 border border-dark-600 rounded text-dark-200 hover:bg-dark-600 flex items-center justify-center text-sm">−</button>
-                    <span className="w-8 text-center text-sm font-medium text-white">{item.quantity}</span>
+                      className="w-8 h-8 bg-slate-100 border border-slate-200 rounded text-slate-700 hover:bg-slate-200 flex items-center justify-center text-sm">−</button>
+                    <span className="w-8 text-center text-sm font-medium text-slate-900">{item.quantity}</span>
                     <button onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
-                      className="w-8 h-8 bg-dark-700 border border-dark-600 rounded text-dark-200 hover:bg-dark-600 flex items-center justify-center text-sm">+</button>
+                      className="w-8 h-8 bg-slate-100 border border-slate-200 rounded text-slate-700 hover:bg-slate-200 flex items-center justify-center text-sm">+</button>
                   </div>
                   <div className="text-right min-w-[80px]">
-                    <p className="text-sm font-semibold text-white">₹{item.subtotal.toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-slate-900">₹{item.subtotal.toLocaleString()}</p>
                   </div>
-                  <button onClick={() => removeItem(item.product_id)} className="text-dark-500 hover:text-red-400 text-sm">✕</button>
+                  <button onClick={() => removeItem(item.product_id)} className="text-slate-400 hover:text-red-600 text-sm">✕</button>
                 </div>
               ))}
             </div>
 
             <div>
               <div className="card p-5 sticky top-6">
-                <h3 className="font-semibold text-white mb-4">Order Summary</h3>
+                <h3 className="font-semibold text-slate-900 mb-4">Order Summary</h3>
                 <div className="space-y-2 text-sm mb-4">
-                  <div className="flex justify-between"><span className="text-dark-400">Subtotal</span><span className="text-white">₹{cart!.total.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span className="text-dark-400">Tax (18% GST)</span><span className="text-white">₹{(cart!.total * 0.18).toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span className="text-dark-400">Shipping</span><span className="text-emerald-400">{cart!.total >= 500 ? 'Free' : '₹49'}</span></div>
-                  <div className="flex justify-between border-t border-dark-600 pt-2">
-                    <span className="text-white font-semibold">Estimated Total</span>
-                    <span className="text-primary-400 font-bold">₹{(cart!.total + cart!.total * 0.18 + (cart!.total >= 500 ? 0 : 49)).toFixed(2)}</span>
+                  <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span className="text-slate-900">₹{cart!.total.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Tax (18% GST)</span><span className="text-slate-900">₹{(cart!.total * 0.18).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Shipping</span><span className="text-emerald-600">{cart!.total >= 500 ? 'Free' : '₹49'}</span></div>
+                  <div className="flex justify-between border-t border-slate-200 pt-2">
+                    <span className="text-slate-900 font-semibold">Estimated Total</span>
+                    <span className="text-primary-700 font-bold">₹{(cart!.total + cart!.total * 0.18 + (cart!.total >= 500 ? 0 : 49)).toFixed(2)}</span>
                   </div>
                 </div>
                 <button onClick={() => setStep('checkout')} className="btn-success w-full py-3 text-base">Proceed to Checkout →</button>
-                <a href="/products" className="block text-center text-sm text-primary-400 hover:text-primary-300 mt-3">Continue Shopping</a>
+                <a href="/products" className="block text-center text-sm text-primary-700 hover:text-primary-600 mt-3">Continue Shopping</a>
               </div>
             </div>
           </div>

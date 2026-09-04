@@ -8,7 +8,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Primary action color — Indigo (fintech/enterprise)
         primary: {
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+          800: '#3730a3',
+          900: '#312e81',
+          950: '#1e1b4b',
+        },
+        // AI accent — Violet (only for AI/agent functionality)
+        ai: {
           50: '#f5f3ff',
           100: '#ede9fe',
           200: '#ddd6fe',
@@ -21,6 +36,7 @@ const config: Config = {
           900: '#4c1d95',
           950: '#2e1065',
         },
+        // Dark surfaces — sidebar only (#0F172A = dark-900)
         dark: {
           50: '#f8fafc',
           100: '#f1f5f9',

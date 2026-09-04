@@ -38,45 +38,45 @@ export default function PaymentsPage() {
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Payment History</h1>
-        <p className="text-dark-400 text-sm mt-1">Track all transactions · TEST MODE</p>
+        <h1 className="text-2xl font-bold text-slate-900">Payment History</h1>
+        <p className="text-slate-500 text-sm mt-1">Track all transactions · TEST MODE</p>
       </div>
 
       {loading ? (
-        <div className="h-64 bg-dark-800 rounded-lg animate-pulse"></div>
+        <div className="h-64 bg-slate-200/70 rounded-lg animate-pulse"></div>
       ) : payments.length === 0 ? (
         <div className="card p-12 text-center">
           <div className="text-6xl mb-4">💳</div>
-          <p className="text-dark-300">No payments yet</p>
+          <p className="text-slate-600">No payments yet</p>
         </div>
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-dark-800 border-b border-dark-700">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-dark-400 uppercase">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-dark-400 uppercase">Amount</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-dark-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-dark-400 uppercase">Razorpay ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-dark-400 uppercase">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-dark-400 uppercase">Actions</th>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Razorpay ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-dark-700">
+              <tbody className="divide-y divide-slate-200">
                 {payments.map(p => (
-                  <tr key={p.id} className="hover:bg-dark-800/50">
-                    <td className="px-4 py-3 font-mono text-dark-200 text-xs">{p.id.slice(0, 8)}...</td>
-                    <td className="px-4 py-3 font-semibold text-white">₹{p.amount.toLocaleString()}</td>
+                  <tr key={p.id} className="hover:bg-slate-100">
+                    <td className="px-4 py-3 font-mono text-slate-700 text-xs">{p.id.slice(0, 8)}...</td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">₹{p.amount.toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <span className={statusColor(p.status)}>{p.status}</span>
-                      {p.failure_reason && <p className="text-xs text-red-400 mt-1">{p.failure_reason}</p>}
+                      {p.failure_reason && <p className="text-xs text-red-600 mt-1">{p.failure_reason}</p>}
                     </td>
-                    <td className="px-4 py-3 text-dark-300 font-mono text-xs">{p.razorpay_order_id || '-'}</td>
-                    <td className="px-4 py-3 text-dark-400 text-xs">{p.created_at ? new Date(p.created_at).toLocaleString() : '-'}</td>
+                    <td className="px-4 py-3 text-slate-600 font-mono text-xs">{p.razorpay_order_id || '-'}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs">{p.created_at ? new Date(p.created_at).toLocaleString() : '-'}</td>
                     <td className="px-4 py-3">
                       {p.status === 'initiated' && (
-                        <button onClick={() => handleDemoFail(p.id)} className="text-xs text-red-400 hover:text-red-300">Demo Fail</button>
+                        <button onClick={() => handleDemoFail(p.id)} className="text-xs text-red-600 hover:text-red-700">Demo Fail</button>
                       )}
                     </td>
                   </tr>

@@ -42,7 +42,7 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-dark-900 border-b border-dark-700 sticky top-0 z-50">
+    <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 lg:px-6">
         {/* pl-12 (below lg) clears the fixed hamburger button so the two never overlap.
             Branding shows here only below lg — on lg+ the sidebar is visible and is the
@@ -50,12 +50,12 @@ export default function Header() {
         <div className="flex items-center justify-between h-16 pl-12 lg:pl-0">
           {/* Logo (mobile/tablet only) */}
           <Link href="/" aria-label="AI Growth & Commerce Agent - Home" className="flex items-center gap-2.5 flex-shrink-0 lg:hidden">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
               <span className="text-white font-bold text-sm">A</span>
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-sm font-bold text-white leading-tight">AI Growth</h1>
-              <p className="text-[9px] text-dark-400 uppercase tracking-wider">Commerce Agent</p>
+              <h1 className="text-sm font-bold text-slate-900 leading-tight">AI Growth</h1>
+              <p className="text-[9px] text-slate-500 uppercase tracking-wider">Commerce Agent</p>
             </div>
           </Link>
 
@@ -67,10 +67,10 @@ export default function Header() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search products, brands, categories..."
-                className="w-full pl-10 pr-4 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
               />
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a5 5 0 11-14 0 5 5 0 0114 0z" />
               </svg>
             </div>
           </form>
@@ -79,14 +79,14 @@ export default function Header() {
           <div className="flex items-center gap-3">
             <Link
               href="/cart"
-              className="relative p-2 rounded-lg hover:bg-dark-700 transition-colors"
+              className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
               aria-label="Shopping Cart"
             >
-              <svg className="w-5 h-5 text-dark-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               {cartCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-primary-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-indigo-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                   {cartCount > 99 ? '99+' : cartCount}
                 </span>
               )}

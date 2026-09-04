@@ -294,7 +294,7 @@ export default function CampaignsPage() {
             <button
               onClick={manualPropose}
               disabled={busy}
-              className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+              className="w-full py-2.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors border border-slate-300"
             >
               {busy ? 'Checking policy...' : 'Propose campaign (policy check)'}
             </button>

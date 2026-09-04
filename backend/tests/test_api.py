@@ -408,13 +408,59 @@ async def test_dashboard(client):
     assert "recent_orders" in data
     assert isinstance(data["revenue_chart"], list)
 
+    # Synthetic demo dataset: labeled, deterministic, realistic non-zero KPIs.
+    assert data.get("data_source") == "synthetic"
+    assert data.get("label") == "Synthetic Demo Data"
+    assert data.get("total_revenue", 0) > 0
+    assert data.get("total_orders", 0) > 0
+    assert data.get("profit", 0) > 0
+    assert data.get("total_customers", 0) > 0
+    assert len(data["revenue_chart"]) == 90
+
+    # Customers: segment partition must equal the total.
+    cust = data.get("customers", {})
+    assert cust.get("total", 0) > 0
+    seg_sum = sum(s["count"] for s in cust.get("segments", []))
+    assert seg_sum == cust["total"]
+
+    # Top products must point at real catalog rows (id + image_url key).
+    tp = data.get("top_products", [])
+    assert tp and tp[0].get("id")
+    assert "image_url" in tp[0]
+
+
+async def test_dashboard_deterministic(client):
+    """Refreshing the dashboard must return identical synthetic numbers."""
+    a = (await client.get("/api/analytics/dashboard")).json()
+    b = (await client.get("/api/analytics/dashboard")).json()
+    assert a == b
+    assert a["total_revenue"] == b["total_revenue"]
+
 
 async def test_revenue_chart(client):
-    resp = await client.get("/api/analytics/revenue-chart?period=7d")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert isinstance(data, list)
-    assert len(data) > 0
+    for period, expected in [("7d", 7), ("30d", 30), ("90d", 90), ("1y", 365)]:
+        resp = await client.get(f"/api/analytics/revenue-chart?period={period}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) == expected
+
+    # 7d/30d/90d must be tail slices of the dashboard's own 90-day series.
+    dash = (await client.get("/api/analytics/dashboard")).json()
+    rc = dash["revenue_chart"]
+    c90 = (await client.get("/api/analytics/revenue-chart?period=90d")).json()
+    c30 = (await client.get("/api/analytics/revenue-chart?period=30d")).json()
+    assert c90 == rc
+    assert c30 == rc[-30:]
+
+
+async def test_growth_synthetic_deterministic(client):
+    """/api/synthetic/dashboard must not change between refreshes."""
+    a = (await client.get("/api/synthetic/dashboard")).json()
+    b = (await client.get("/api/synthetic/dashboard")).json()
+    assert a == b
+    assert a["summary"]["total_revenue"] > 0
+    assert a.get("label") == "Demo Analytics — Synthetic Data"
 
 
 # ==================== Policies ====================

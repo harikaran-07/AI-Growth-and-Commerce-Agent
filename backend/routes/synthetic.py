@@ -11,8 +11,10 @@ from datetime import datetime, timedelta, timezone
 
 router = APIRouter()
 
-# Seed for reproducible but realistic data
-random.seed(42)
+# Fixed seed for reproducible, deterministic data. Each generator creates its
+# OWN fresh Random(SEED) instance per call so the numbers never drift between
+# requests or refreshes (a module-level RNG would advance on every call).
+SEED = 42
 
 CATEGORIES = ["Electronics", "Smartphones", "Laptops", "Accessories", "Audio", "Televisions", "Home Appliances", "Fashion", "Personal Care"]
 
@@ -44,7 +46,8 @@ PRODUCTS = [
 
 
 def _generate_monthly_data(months: int = 12) -> List[Dict[str, Any]]:
-    """Generate realistic monthly sales data for the last N months."""
+    """Generate realistic monthly sales data for the last N months (deterministic)."""
+    rng = random.Random(SEED)
     now = datetime.now(timezone.utc)
     monthly = []
     
@@ -80,20 +83,20 @@ def _generate_monthly_data(months: int = 12) -> List[Dict[str, Any]]:
             weekend_factor = 1.3 if day_of_week >= 5 else 1.0
             
             # Daily orders (15-45 per day, with variance)
-            daily_orders = int(random.gauss(25, 8) * seasonal_factor * growth_factor * weekend_factor)
+            daily_orders = int(rng.gauss(25, 8) * seasonal_factor * growth_factor * weekend_factor)
             daily_orders = max(5, min(60, daily_orders))
             
             for _ in range(daily_orders):
                 # Pick a random product with weighted probability
-                product = random.choice(PRODUCTS)
+                product = rng.choice(PRODUCTS)
                 
                 # Popularity weighting (higher-rated products sell more)
                 if product["rating"] >= 4.5:
-                    if random.random() > 0.4:
-                        product = random.choice(PRODUCTS)
+                    if rng.random() > 0.4:
+                        product = rng.choice(PRODUCTS)
                 
-                qty = random.choices([1, 2, 3], weights=[70, 20, 10])[0]
-                price = product["price"] * random.uniform(0.95, 1.0)  # Occasional discounts
+                qty = rng.choices([1, 2, 3], weights=[70, 20, 10])[0]
+                price = product["price"] * rng.uniform(0.95, 1.0)  # Occasional discounts
                 cost = product["cost"]
                 
                 month_revenue += price * qty
@@ -119,14 +122,15 @@ def _generate_monthly_data(months: int = 12) -> List[Dict[str, Any]]:
 
 
 def _generate_category_performance() -> List[Dict[str, Any]]:
-    """Generate category performance data."""
+    """Generate category performance data (deterministic)."""
+    rng = random.Random(SEED)
     cat_data = {}
     for p in PRODUCTS:
         cat = p["category"]
         if cat not in cat_data:
             cat_data[cat] = {"revenue": 0, "units": 0, "products": 0, "avg_margin": 0}
         # Simulate sales
-        sales = random.randint(50, 500)
+        sales = rng.randint(50, 500)
         cat_data[cat]["revenue"] += p["price"] * sales
         cat_data[cat]["units"] += sales
         cat_data[cat]["products"] += 1

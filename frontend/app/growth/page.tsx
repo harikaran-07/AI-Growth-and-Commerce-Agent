@@ -42,9 +42,10 @@ export default function GrowthPage() {
         const d = await res.json()
         setData(d)
       } else {
-        const res = await fetch('/api/analytics/dashboard')
+        // Real mode reads the REAL analytics summary (/api/analytics/) so it is
+        // never confused with the labeled Synthetic Demo Data on /dashboard.
+        const res = await fetch('/api/analytics/')
         const d = await res.json()
-        // Map real data to synthetic format
         setData({
           source: 'real',
           label: 'Real Data — Live Transactions',
@@ -53,16 +54,14 @@ export default function GrowthPage() {
             total_revenue: d.total_revenue || 0,
             total_profit: d.profit || 0,
             total_orders: d.total_orders || 0,
-            total_units_sold: d.products_sold || 0,
+            total_units_sold: d.total_items_sold || d.products_sold || 0,
             avg_margin: d.margin || 0,
             avg_order_value: d.average_order_value || 0,
             revenue_growth: 0,
             profit_growth: 0,
           },
           monthly_data: [],
-          category_performance: d.category_revenue?.map((c: any) => ({
-            category: c.category, revenue: c.revenue, units_sold: c.sales, product_count: 0, avg_margin: 0
-          })) || [],
+          category_performance: [],
           growth_score: { score: 0, factors: [], summary: 'Not enough data for growth score. Complete more orders to enable analysis.' },
           investment_recommendations: [],
           growth_opportunities: [],

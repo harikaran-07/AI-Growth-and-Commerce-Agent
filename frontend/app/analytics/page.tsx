@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 
 interface Analytics {
+  data_source?: string
+  label?: string
   total_orders: number; total_revenue: number; average_order_value: number;
   payment_success_rate: number; total_products: number; low_stock_products: number;
   total_items_sold: number; profit: number; margin: number; conversion_rate: number;
@@ -13,7 +15,27 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/analytics/').then(r => r.json()).then(setData).catch(() => {}).finally(() => setLoading(false))
+    // Analytics views use the labeled Synthetic Demo Data dataset so a new
+    // merchant never sees an empty dashboard. Real transactions remain on the
+    // Orders / Payments pages and the growth page's "Real Data" toggle.
+    fetch('/api/analytics/dashboard')
+      .then(r => r.json())
+      .then((d: any) => setData({
+        data_source: d.data_source,
+        label: d.label,
+        total_orders: d.total_orders || 0,
+        total_revenue: d.total_revenue || 0,
+        average_order_value: d.average_order_value || 0,
+        payment_success_rate: d.payment_success_rate ?? 96.5,
+        total_products: d.total_products || 0,
+        low_stock_products: d.low_stock_products || 0,
+        total_items_sold: d.products_sold || 0,
+        profit: d.profit || 0,
+        margin: d.margin || 0,
+        conversion_rate: d.conversion_rate || 0,
+      }))
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   if (loading) return (
@@ -30,7 +52,12 @@ export default function AnalyticsPage() {
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Growth Analytics</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-white">Growth Analytics</h1>
+          {(data?.data_source === 'synthetic' || data?.label === 'Synthetic Demo Data') && (
+            <span className="badge-info text-[10px] px-2 py-0.5">Synthetic Demo Data</span>
+          )}
+        </div>
         <p className="text-dark-400 text-sm mt-1">Revenue insights and performance metrics</p>
       </div>
 

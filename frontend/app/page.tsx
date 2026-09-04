@@ -273,9 +273,9 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
-            <div className="flex items-end gap-px h-48">
+            <div className="flex gap-px h-48">
               {chart.map((point, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+                <div key={i} className="flex-1 flex flex-col justify-end items-center gap-1 group relative">
                   <div className="absolute bottom-full mb-2 hidden group-hover:block bg-dark-800 border border-dark-600 rounded px-2 py-1 text-[10px] text-dark-200 whitespace-nowrap z-10">
                     {point.label}: ₹{formatNumber(point.revenue)}
                   </div>

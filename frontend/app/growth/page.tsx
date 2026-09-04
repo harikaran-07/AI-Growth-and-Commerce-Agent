@@ -284,11 +284,11 @@ export default function GrowthPage() {
       {data.monthly_data.length > 0 && (
         <div className="card p-5">
           <h3 className="text-sm font-semibold text-white mb-4">Monthly Revenue Trend</h3>
-          <div className="flex items-end gap-1 h-48">
+          <div className="flex gap-1 h-48">
             {data.monthly_data.map((m, i) => {
               const maxRev = Math.max(...data.monthly_data.map(d => d.revenue), 1)
               return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+                <div key={i} className="flex-1 flex flex-col justify-end items-center gap-1 group relative">
                   <div className="absolute bottom-full mb-2 hidden group-hover:block bg-dark-800 border border-dark-600 rounded px-2 py-1 text-[10px] text-dark-200 whitespace-nowrap z-10">
                     {m.month}: ₹{formatNumber(m.revenue)}
                   </div>

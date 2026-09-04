@@ -129,29 +129,38 @@ async def _search_products(arguments: Dict, db: AsyncSession, session_id: str, s
     max_price = arguments.get("max_price")
     min_price = arguments.get("min_price")
 
-    if category:
-        from sqlalchemy import or_
-        query = query.where(or_(
-            Product.category.ilike(f"%{category}%"),
-            Product.subcategory.ilike(f"%{category}%"),
-        ))
     if max_price is not None:
         query = query.where(Product.price <= max_price)
     if min_price is not None:
         query = query.where(Product.price >= min_price)
 
-    search_text = arguments.get("query", "")
-    if search_text:
-        from sqlalchemy import or_
-        search_filter = or_(
-            Product.name.ilike(f"%{search_text}%"),
-            Product.description.ilike(f"%{search_text}%"),
-            Product.category.ilike(f"%{search_text}%"),
-            Product.subcategory.ilike(f"%{search_text}%"),
-            Product.tags.ilike(f"%{search_text}%"),
-            Product.brand.ilike(f"%{search_text}%"),
-        )
-        query = query.where(search_filter)
+    # Token-based matching: every meaningful word must appear in at least one
+    # product field (name/description/category/subcategory/tags/brand). This
+    # avoids whole-phrase failures like "wireless smartphones" never matching a
+    # single field verbatim, while keeping results precise.
+    from sqlalchemy import and_, or_
+    search_text = arguments.get("query", "") or ""
+    terms = [w.lower() for w in search_text.split() if len(w) > 1]
+    if category:
+        cat_term = category.lower()
+        if cat_term not in terms:
+            terms.append(cat_term)
+
+    if terms:
+        term_conditions = []
+        for term in terms:
+            term_conditions.append(or_(
+                Product.name.ilike(f"%{term}%"),
+                Product.description.ilike(f"%{term}%"),
+                Product.category.ilike(f"%{term}%"),
+                Product.subcategory.ilike(f"%{term}%"),
+                Product.tags.ilike(f"%{term}%"),
+                Product.brand.ilike(f"%{term}%"),
+            ))
+        if len(term_conditions) == 1:
+            query = query.where(term_conditions[0])
+        else:
+            query = query.where(and_(*term_conditions))
 
     # Optional deterministic ordering: cheapest first, best rated, or most sold.
     sort_by = arguments.get("sort")

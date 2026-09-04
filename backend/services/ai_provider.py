@@ -254,10 +254,13 @@ def resolve_followup_text(text: str, session_data: Dict) -> str:
     prev_text = prev_q or prev_cat or "products"
 
     # 1. "which is better / cheaper / the best one / which should I pick"
-    if has_search and (re.search(r"\b(which|what)\s+(one\s+)?(is|are|would\s+be|s)\s+(the\s+)?(better|best|cheaper|cheapest|faster|more\s+worth|worth)\b", t) or \
+    #    (only when there ARE products in context AND the user is not naming
+    #    a new category/product of their own)
+    has_cat_word = any(w in CATEGORY_ALIASES for w in t.split())
+    if has_search and not has_cat_word and (re.search(r"\b(which|what)\s+(one\s+)?(is|are|would\s+be|s)\s+(the\s+)?(better|best|cheaper|cheapest|faster|more\s+worth|worth)\b", t) or \
        re.search(r"\bwhich\s+(one\s+)?(should\s+i|do\s+you\s+(recommend|suggest)|is\s+better)\b", t) or \
        re.search(r"\b(compare|comparison)\b.*\b(them|these|those|the\s+(first|second|two|ones|three)|this|that)\b", t) or \
-                       re.search(r"\b(which)\s+(of|among)\s+(them|these|those)\b", t)):
+       re.search(r"\b(which)\s+(of|among)\s+(them|these|those)\b", t)):
         return "compare them for me"
 
     # 2. Set quantity: "make it two", "set to 3", "make that 5"

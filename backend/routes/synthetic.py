@@ -45,6 +45,16 @@ PRODUCTS = [
 ]
 
 
+# Weight a product pick inversely to price so value items sell far more often
+# than flagship electronics - keeps totals in a realistic SMB range.
+_PRODUCT_WEIGHTS = [1.0 / (p["price"] ** 1.0) for p in PRODUCTS]
+
+
+def _pick_product(rng: random.Random) -> dict:
+    """Weighted product pick: cheaper/value items are chosen far more often."""
+    return rng.choices(PRODUCTS, weights=_PRODUCT_WEIGHTS)[0]
+
+
 def _generate_monthly_data(months: int = 12) -> List[Dict[str, Any]]:
     """Generate realistic monthly sales data for the last N months (deterministic)."""
     rng = random.Random(SEED)
@@ -59,7 +69,7 @@ def _generate_monthly_data(months: int = 12) -> List[Dict[str, Any]]:
         month_num = month_date.month
         seasonal_factor = 1.0
         if month_num in (10, 11, 12):  # Festival season
-            seasonal_factor = 1.4
+            seasonal_factor = 1.35
         elif month_num in (1, 2):  # Post-festival dip
             seasonal_factor = 0.8
         elif month_num in (3, 4):  # Summer
@@ -82,18 +92,14 @@ def _generate_monthly_data(months: int = 12) -> List[Dict[str, Any]]:
             # Weekend boost
             weekend_factor = 1.3 if day_of_week >= 5 else 1.0
             
-            # Daily orders (15-45 per day, with variance)
-            daily_orders = int(rng.gauss(25, 8) * seasonal_factor * growth_factor * weekend_factor)
-            daily_orders = max(5, min(60, daily_orders))
+            # Daily orders (~6-18 per day, with variance) - tuned so the
+            # latest months land near the dashboard's ~₹6L/month scale.
+            daily_orders = int(rng.gauss(10, 4) * seasonal_factor * growth_factor * weekend_factor)
+            daily_orders = max(4, min(30, daily_orders))
             
             for _ in range(daily_orders):
-                # Pick a random product with weighted probability
-                product = rng.choice(PRODUCTS)
-                
-                # Popularity weighting (higher-rated products sell more)
-                if product["rating"] >= 4.5:
-                    if rng.random() > 0.4:
-                        product = rng.choice(PRODUCTS)
+                # Pick a product with value-weighted probability
+                product = _pick_product(rng)
                 
                 qty = rng.choices([1, 2, 3], weights=[70, 20, 10])[0]
                 price = product["price"] * rng.uniform(0.95, 1.0)  # Occasional discounts

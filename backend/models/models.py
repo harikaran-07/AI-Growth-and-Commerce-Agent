@@ -146,8 +146,41 @@ class Policy(Base):
     max_discount_percentage = Column(Float, default=10)
     payment_requires_approval = Column(Boolean, default=False)
     max_retry_attempts = Column(Integer, default=1)
+    # Campaign safety limits (money-action boundaries for the orchestrator)
+    max_campaign_budget = Column(Float, default=100000)
+    minimum_margin_percentage = Column(Float, default=20)
     created_at = Column(DateTime, default=utcnow)
     merchant = relationship("Merchant", back_populates="policies")
+
+
+class Campaign(Base):
+    """A merchant-approved promotional campaign (synthetic demo execution).
+
+    Lifecycle: proposed → pending_approval → approved → executing → completed
+    (or proposed → rejected_by_policy / approved → rejected).
+    """
+    __tablename__ = "campaigns"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    name = Column(String, nullable=False)
+    objective = Column(String)
+    target_segment = Column(String)
+    product_ids = Column(Text, default="[]")   # JSON list
+    discount_percentage = Column(Float, default=0)
+    budget_limit = Column(Float, default=0)
+    expected_revenue = Column(Float, default=0)
+    expected_profit = Column(Float, default=0)
+    expected_margin = Column(Float, default=0)
+    reason = Column(Text)
+    evidence = Column(Text)
+    status = Column(String, default="proposed")
+    policy_result = Column(String)              # pass / blocked reason
+    approval_status = Column(String, default="none")  # none|pending|approved|rejected
+    result = Column(Text)                        # JSON simulation result (synthetic)
+    failure_reason = Column(Text)
+    label = Column(String, default="Synthetic Demo Result")
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    executed_at = Column(DateTime)
 
 class Approval(Base):
     __tablename__ = "approvals"

@@ -13,7 +13,7 @@ from starlette.responses import Response
 from contextlib import asynccontextmanager
 from models.database import engine, Base, init_db
 from routes import products, carts, payments, agent, audit, analytics, policies, approvals, webhooks
-from routes import orders, notifications, pricing, synthetic
+from routes import orders, notifications, pricing, synthetic, campaigns
 import os
 import logging
 
@@ -74,6 +74,13 @@ async def lifespan(app: FastAPI):
                 await trim_catalog()
             except Exception as te:
                 logger.error(f"Catalog trim migration failed: {te}")
+
+            # One-time migration: add campaign policy columns on legacy DBs
+            try:
+                from scripts.migrate_policy_columns import migrate_policy_columns
+                await migrate_policy_columns()
+            except Exception as mpc:
+                logger.error(f"Policy column migration failed: {mpc}")
 
     except Exception as e:
         logger.error(f"Startup check failed: {e}")
@@ -136,6 +143,7 @@ app.include_router(orders.router, prefix="/api/orders", tags=["Orders"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(pricing.router, prefix="/api/pricing", tags=["Pricing"])
 app.include_router(synthetic.router, prefix="/api", tags=["Synthetic Data"])
+app.include_router(campaigns.router, prefix="/api/campaigns", tags=["Campaigns"])
 
 
 @app.get("/health")

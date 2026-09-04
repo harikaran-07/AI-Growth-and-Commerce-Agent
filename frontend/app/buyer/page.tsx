@@ -46,6 +46,8 @@ interface Product {
   image_url?: string
   sales?: number
   bestseller_score?: number
+  reason?: string
+  type?: string
 }
 
 interface CartInfo {
@@ -413,6 +415,9 @@ export default function BuyerPage() {
                           <p className="text-sm font-medium text-white truncate leading-tight">{sanitizeProductName(p.name)}</p>
                           {p.brand && (
                             <p className="text-[11px] text-dark-400 mt-0.5">{p.brand}</p>
+                          )}
+                          {p.reason && (
+                            <p className="text-[10px] text-primary-400/90 leading-snug mt-1">💡 {p.reason}</p>
                           )}
                           <div className="flex items-center gap-2 mt-2">
                             <span className="text-base font-bold text-primary-400">₹{p.price.toLocaleString()}</span>

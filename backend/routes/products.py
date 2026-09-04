@@ -237,24 +237,77 @@ async def update_product(product_id: str, update: ProductUpdate, db: AsyncSessio
 
 
 @router.get("/agent/catalog")
-async def get_agent_catalog(db: AsyncSession = Depends(get_db)):
-    """Get agent-readable catalog."""
-    products_result = await db.execute(
-        select(Product).where(Product.stock > 0).limit(500)
-    )
-    products = products_result.scalars().all()
-    catalog = []
-    for p in products:
-        catalog.append({
-            "product_id": p.id,
+async def get_agent_catalog(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    in_stock: Optional[bool] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get paginated agent-readable catalog (full stable fields, searchable).
+
+    Response items use `id` (the stable product UUID also used by the products
+    page, product details, chat, cart and orders) so an AI buyer can add the
+    exact product to a shared cart. Never index/random-based image mapping.
+    """
+    query = select(Product)
+    count_query = select(func.count(Product.id))
+    conditions = []
+    if category:
+        conditions.append(or_(
+            Product.category.ilike(f"%{category}%"),
+            Product.subcategory.ilike(f"%{category}%"),
+        ))
+    if in_stock is True:
+        conditions.append(Product.stock > 0)
+    elif in_stock is False:
+        conditions.append(Product.stock <= 0)
+    if q:
+        term = f"%{q}%"
+        conditions.append(or_(
+            Product.name.ilike(term), Product.description.ilike(term),
+            Product.brand.ilike(term), Product.category.ilike(term),
+            Product.subcategory.ilike(term), Product.sku.ilike(term),
+        ))
+    if conditions:
+        query = query.where(and_(*conditions))
+        count_query = count_query.where(and_(*conditions))
+
+    total = (await db.execute(count_query)).scalar() or 0
+    query = query.order_by(Product.revenue.desc()).offset((page - 1) * page_size).limit(page_size)
+    products = (await db.execute(query)).scalars().all()
+
+    def _agent_item(p):
+        discount = 0.0
+        if p.previous_price and p.price and p.previous_price > p.price:
+            discount = round((p.previous_price - p.price) / p.previous_price * 100, 1)
+        return {
+            "id": p.id,
+            "product_id": p.id,  # alias for backward compatibility
+            "sku": p.sku or "",
             "name": p.name,
-            "description": p.description,
+            "description": p.description or "",
+            "brand": p.brand or "",
             "category": p.category,
-            "price": p.price,
-            "currency": p.currency,
-            "stock": p.stock,
-            "availability": p.stock > 0,
-            "related_products": [],
-            "complementary_products": []
-        })
-    return catalog
+            "subcategory": p.subcategory or "",
+            "price": float(p.price or 0),
+            "currency": p.currency or "INR",
+            "discount": discount,
+            "stock": int(p.stock or 0),
+            "availability": bool(p.stock and p.stock > 0 and p.is_active),
+            "rating": float(p.rating or 0),
+            "image_url": p.image_url or "",
+            "product_url": f"/product?id={p.id}",
+            "tags": (p.tags or "").split(",") if p.tags else [],
+            "sales": int(p.sales or 0),
+            "revenue": float(p.revenue or 0),
+        }
+
+    return {
+        "products": [_agent_item(p) for p in products],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size if total else 0,
+    }

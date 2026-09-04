@@ -13,6 +13,7 @@ const navItems = [
   { href: '/payments', label: 'Payments', icon: '💳', color: 'text-green-400' },
   { href: '/analytics', label: 'Analytics', icon: '📈', color: 'text-pink-400' },
   { href: '/growth', label: 'Growth & Investment', icon: '🚀', color: 'text-violet-400' },
+  { href: '/campaigns', label: 'Campaigns', icon: '📣', color: 'text-rose-400' },
   { href: '/audit', label: 'Audit Trail', icon: '🔍', color: 'text-orange-400' },
   { href: '/settings', label: 'Settings', icon: '⚙️', color: 'text-gray-400' },
 ]

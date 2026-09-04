@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 interface Policy {
   id: string; max_transaction_amount: number; max_discount_percentage: number;
   payment_requires_approval: boolean; max_retry_attempts: number;
+  max_campaign_budget: number; minimum_margin_percentage: number;
 }
 
 interface HealthStatus {
@@ -116,6 +117,20 @@ export default function SettingsPage() {
                 policy?.payment_requires_approval ? 'translate-x-6' : 'translate-x-1'
               }`} />
             </button>
+          </div>
+          <div>
+            <label className="text-xs text-dark-400 mb-1 block">Max Campaign Budget (₹)</label>
+            <input type="number" value={policy?.max_campaign_budget ?? 100000}
+              onChange={e => setPolicy(p => p ? { ...p, max_campaign_budget: parseFloat(e.target.value) } : null)}
+              className="input" />
+            <p className="text-[10px] text-dark-500 mt-1">Campaign proposals above this are blocked by policy</p>
+          </div>
+          <div>
+            <label className="text-xs text-dark-400 mb-1 block">Minimum Margin %</label>
+            <input type="number" value={policy?.minimum_margin_percentage ?? 20}
+              onChange={e => setPolicy(p => p ? { ...p, minimum_margin_percentage: parseFloat(e.target.value) } : null)}
+              className="input" />
+            <p className="text-[10px] text-dark-500 mt-1">Campaigns expected to fall below this margin are blocked</p>
           </div>
         </div>
 

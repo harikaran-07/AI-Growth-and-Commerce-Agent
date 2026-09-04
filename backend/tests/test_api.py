@@ -179,11 +179,13 @@ async def test_product_update(client):
 
 
 async def test_agent_catalog(client):
+    # Legacy products/agent/catalog endpoint now shares the paginated envelope
     resp = await client.get("/api/products/agent/catalog")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) > 0
-    for item in data:
+    assert data["total"] > 0
+    assert len(data["products"]) > 0
+    for item in data["products"]:
         assert "product_id" in item
         assert "availability" in item
 
@@ -638,3 +640,198 @@ async def test_e2e_cart_to_payment(client):
     audit_resp = await client.get("/api/audit/")
     assert audit_resp.status_code == 200
     # Should have payment success audit event
+
+
+# ==================== Campaign Orchestrator ====================
+
+async def test_campaign_policy_blocks_30_percent_discount(client):
+    """A 30% discount must be rejected by policy with a clear reason."""
+    resp = await client.post("/api/campaigns/propose", json={
+        "name": "30 percent off everything",
+        "objective": "Increase conversion",
+        "target_segment": "All shoppers",
+        "discount_percentage": 30,
+        "budget_limit": 100000,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["count"] >= 1
+    blocked = [c for c in data["proposed"] if c["status"] == "rejected_by_policy"]
+    assert blocked, "30% discount proposal should have been blocked"
+    assert "30%" in blocked[0]["policy_result"]
+    assert "10%" in blocked[0]["policy_result"]
+
+
+async def test_campaign_propose_approve_execute(client):
+    """Full lifecycle: PROPOSED → APPROVED → EXECUTED with a synthetic demo result."""
+    resp = await client.post("/api/campaigns/propose", json={
+        "name": "8 percent accessory promo",
+        "objective": "Increase average order value",
+        "target_segment": "Headphone buyers",
+        "product_ids": ["p1"],
+        "discount_percentage": 8,
+        "budget_limit": 8000,
+        "expected_margin": 30,
+        "reason": "Customers buying headphones frequently buy accessories.",
+    })
+    assert resp.status_code == 200
+    campaign = resp.json()["proposed"][0]
+    assert campaign["status"] == "pending_approval"
+    assert campaign["approval_status"] == "pending"
+    cid = campaign["campaign_id"]
+
+    # Approve
+    resp = await client.post(f"/api/campaigns/{cid}/approve")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "approved"
+
+    # Execute
+    resp = await client.post(f"/api/campaigns/{cid}/execute")
+    assert resp.status_code == 200
+    executed = resp.json()
+    assert executed["status"] == "completed"
+    assert executed["result"] is not None
+    assert executed["result"].get("revenue_generated", 0) > 0
+    assert executed["result"].get("orders_generated", 0) > 0
+    assert executed["result"].get("simulated") is True
+
+    # Execute a second approved campaign with the failure simulation
+    resp2 = await client.post("/api/campaigns/propose", json={
+        "name": "8 percent promo two",
+        "product_ids": ["p1"],
+        "discount_percentage": 8,
+        "budget_limit": 8000,
+    })
+    cid2 = resp2.json()["proposed"][0]["campaign_id"]
+    await client.post(f"/api/campaigns/{cid2}/approve")
+    resp = await client.post(f"/api/campaigns/{cid2}/execute", json={"simulate_inventory_failure": True})
+    assert resp.status_code == 200
+    failed = resp.json()
+    assert failed["status"] == "failed"
+    assert "insufficient inventory" in failed["failure_reason"].lower()
+
+    # Audit trail must contain the campaign lifecycle events
+    audit_resp = await client.get("/api/audit/")
+    actions = [a["action"] for a in audit_resp.json()]
+    assert "CAMPAIGN_PROPOSED" in actions
+    assert "CAMPAIGN_APPROVED" in actions
+    assert "CAMPAIGN_EXECUTED" in actions
+    assert "CAMPAIGN_FAILED" in actions
+
+
+async def test_campaign_list_no_trailing_slash(client):
+    """GET /api/campaigns (no slash) must return the list without a redirect break."""
+    resp = await client.get("/api/campaigns")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+# ==================== Agent-readable catalog ====================
+
+async def test_agent_catalog_paginated(client):
+    resp = await client.get("/api/agent/catalog?page=1&page_size=3")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 6
+    assert len(data["products"]) == 3
+    assert data["total_pages"] == 2
+    p = data["products"][0]
+    # Spec-required stable fields for an AI buyer
+    for field in ("id", "name", "description", "brand", "category", "subcategory",
+                  "price", "currency", "stock", "availability", "rating", "image_url",
+                  "product_url", "tags"):
+        assert field in p
+    assert p["product_url"].startswith("/product?id=")
+
+
+async def test_agent_product_search_and_detail(client):
+    resp = await client.get("/api/agent/products/search?q=headphones&category=Headphones")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["count"] >= 1
+    ids = {p["id"] for p in data["products"]}
+    assert "p1" in ids
+
+    detail = await client.get("/api/agent/products/p1")
+    assert detail.status_code == 200
+    p = detail.json()
+    assert p["id"] == "p1"
+    assert p["name"] == "Wireless Headphones"
+    assert "image_url" in p
+    assert p["price"] == 2499
+
+    missing = await client.get("/api/agent/products/nope")
+    assert missing.status_code == 404
+
+
+async def test_agent_product_recommendations(client):
+    resp = await client.get("/api/agent/products/p1/recommendations")
+    assert resp.status_code == 200
+    data = resp.json()
+    recs = data["recommendations"]
+    assert len(recs) >= 1
+    assert any(r["id"] == "p2" and r["relationship"] == "cross-sell" for r in recs)
+
+
+# ==================== Chat: accessories & cheaper alternatives ====================
+
+def test_intent_accessories():
+    from services.ai_provider import detect_intent
+    result = detect_intent("what accessories go with the first one")
+    assert result["intent"] == "accessories"
+    assert result["entities"].get("position") == 1
+
+
+def test_intent_cheaper_alternative():
+    from services.ai_provider import detect_intent
+    result = detect_intent("show me cheaper alternatives")
+    assert result["intent"] == "cheaper_alternative"
+
+
+def test_intent_add_two_of_them():
+    from services.ai_provider import detect_intent
+    result = detect_intent("add two of them")
+    assert result["intent"] == "add_to_cart"
+    assert result["entities"].get("quantity") == 2
+
+
+def test_intent_cart_total():
+    from services.ai_provider import detect_intent
+    result = detect_intent("what's my cart total?")
+    assert result["intent"] == "show_cart"
+
+
+async def test_chat_accessories_uses_last_search_context(client):
+    resp = await client.post("/api/agent/chat", json={
+        "message": "show me headphones",
+        "session_id": "chat_access_1",
+    })
+    assert resp.status_code == 200
+    assert len(resp.json()["products"]) > 0
+
+    resp2 = await client.post("/api/agent/chat", json={
+        "message": "what accessories go with the first one?",
+        "session_id": "chat_access_1",
+    })
+    assert resp2.status_code == 200
+    data = resp2.json()
+    # Accessories surface as product cards (with image + reason) for the buyer UI
+    assert len(data["products"]) > 0
+    first = data["products"][0]
+    assert first["product_id"] == "p2"
+    assert first["subcategory"] == "Cases"
+    assert first.get("image_url") is not None
+    assert "Protect your headphones" in (first.get("reason") or "")
+    assert "accessory" in data["message"].lower() or "companion" in data["message"].lower()
+
+
+async def test_chat_cheaper_alternatives_no_context(client):
+    """Without a prior product in context, the assistant must guide the user (never crash)."""
+    resp = await client.post("/api/agent/chat", json={
+        "message": "show me cheaper alternatives",
+        "session_id": "chat_cheap_1",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "search for a product first" in data["message"]
+    assert data["products"] == []

@@ -83,9 +83,11 @@ async def execute_tool(
         elif tool_name == "check_inventory":
             return await _check_inventory(arguments, db)
         elif tool_name == "recommend_upsell":
-            return await _recommend_upsell(arguments, db)
+            return await _recommend_upsell(arguments, db, session_id, session_data)
         elif tool_name == "recommend_cross_sell":
-            return await _recommend_cross_sell(arguments, db)
+            return await _recommend_cross_sell(arguments, db, session_id, session_data)
+        elif tool_name == "get_cheaper_alternatives":
+            return await _get_cheaper_alternatives(arguments, db, session_id, session_data)
         elif tool_name == "add_to_cart":
             return await _add_to_cart(arguments, db, session_id, session_data)
         elif tool_name == "create_checkout":
@@ -223,58 +225,221 @@ async def _check_inventory(arguments: Dict, db: AsyncSession) -> str:
     })
 
 
-async def _recommend_upsell(arguments: Dict, db: AsyncSession) -> str:
-    """Get upsell recommendations (higher-tier alternatives)."""
-    product_id = arguments.get("product_id", "")
+ACCESSORY_SUBCATEGORIES = ("Cases", "Cables", "Chargers", "Car Chargers", "Screen Guards",
+                            "Adapters", "Laptop Stands", "Tablet Covers", "Hubs", "Power Banks",
+                            "USB Drives", "Storage", "Cooling Pads", "Extension Boards",
+                            "Backpacks", "Bags", "Wallets")
+
+
+def _serialize_product(p: Any, position: int = 0) -> Dict[str, Any]:
+    """Full product card shape (same fields as search results) so the UI renders identically."""
+    return {
+        "product_id": p.id,
+        "name": p.name,
+        "description": p.description,
+        "category": p.category,
+        "subcategory": p.subcategory or "",
+        "price": p.price,
+        "previous_price": p.previous_price,
+        "currency": p.currency,
+        "stock": p.stock,
+        "brand": p.brand or "",
+        "rating": p.rating or 0,
+        "image_url": p.image_url or "",
+        "sales": p.sales or 0,
+        "position": position,
+    }
+
+
+def _resolve_context_product(arguments: Dict, session_data: Dict):
+    """
+    Resolve the product currently in conversation context.
+    Accepts an explicit product_id, or a position into the last search results
+    (defaults to the first/most recent result when omitted).
+    Returns (product_id, None) or (None, error_message).
+    """
+    product_id = arguments.get("product_id")
+    if product_id:
+        return product_id, None
+
+    last_results = session_data.get("last_search_results", [])
+    if not last_results:
+        return None, (
+            "I don't have a product in context yet. Please search for a product first "
+            "(e.g. \"Show me headphones\") so I know which product you mean."
+        )
+
+    position = arguments.get("product_position") or 1
+    if position == "last":
+        position = len(last_results)
+    if not isinstance(position, int) or position < 1 or position > len(last_results):
+        return None, f"Invalid position {position}. Only {len(last_results)} product(s) in the last search."
+    return last_results[position - 1]["product_id"], None
+
+
+async def _load_product(db: AsyncSession, product_id: str):
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    return result.scalar_one_or_none()
+
+
+async def _recommend_upsell(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:
+    """Get upsell recommendations (higher-tier alternatives with real benefits)."""
+    product_id, error = _resolve_context_product(arguments, session_data)
+    if error:
+        return json.dumps({"error": error})
+
+    anchor = await _load_product(db, product_id)
+    if not anchor:
+        return json.dumps({"error": "Product not found"})
+
+    recommendations = []
+    seen = {product_id}
     rels_result = await db.execute(
         select(ProductRelationship).where(
             ProductRelationship.product_id == product_id,
             ProductRelationship.relationship_type == "upsell"
         )
     )
-    rels = rels_result.scalars().all()
+    for rel in rels_result.scalars().all():
+        product = await _load_product(db, rel.related_product_id)
+        if product and product.stock > 0 and product.id not in seen:
+            seen.add(product.id)
+            item = _serialize_product(product, len(recommendations) + 1)
+            item["reason"] = rel.reason or "Higher tier with better specifications."
+            item["type"] = "upsell"
+            recommendations.append(item)
+
+    # Deterministic fallback: same subcategory, higher price (up to +40%), cheapest tier first.
+    if not recommendations:
+        higher = await db.execute(
+            select(Product).where(
+                Product.subcategory == anchor.subcategory,
+                Product.stock > 0,
+                Product.price > anchor.price,
+                Product.price <= anchor.price * 1.4,
+                Product.id != anchor.id,
+            ).order_by(Product.price.asc()).limit(3)
+        )
+        for product in higher.scalars().all():
+            if product.id in seen:
+                continue
+            seen.add(product.id)
+            uplift = product.price - anchor.price
+            item = _serialize_product(product, len(recommendations) + 1)
+            item["reason"] = (
+                f"₹{uplift:,.0f} more than {anchor.name} for a higher-spec model "
+                f"in the same range."
+            )
+            item["type"] = "upsell"
+            recommendations.append(item)
+
+    message = f"Found {len(recommendations)} upsell option(s) for {anchor.name}." if recommendations else \
+        f"No higher-tier upgrade is available for {anchor.name} right now."
+
+    return json.dumps({"products": recommendations, "recommendations": recommendations,
+                       "count": len(recommendations), "message": message})
+
+
+async def _recommend_cross_sell(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:
+    """Get cross-sell/complementary recommendations (real catalog products with reasons)."""
+    product_id, error = _resolve_context_product(arguments, session_data)
+    if error:
+        return json.dumps({"error": error})
+
+    anchor = await _load_product(db, product_id)
+    if not anchor:
+        return json.dumps({"error": "Product not found"})
 
     recommendations = []
-    for rel in rels:
-        product_result = await db.execute(select(Product).where(Product.id == rel.related_product_id))
-        product = product_result.scalar_one_or_none()
-        if product and product.stock > 0:
-            recommendations.append({
-                "product_id": product.id,
-                "name": product.name,
-                "price": product.price,
-                "reason": rel.reason,
-                "type": "upsell"
-            })
-
-    return json.dumps({"recommendations": recommendations, "count": len(recommendations)})
-
-
-async def _recommend_cross_sell(arguments: Dict, db: AsyncSession) -> str:
-    """Get cross-sell/complementary recommendations."""
-    product_id = arguments.get("product_id", "")
+    seen = {product_id}
     rels_result = await db.execute(
         select(ProductRelationship).where(
             ProductRelationship.product_id == product_id,
             ProductRelationship.relationship_type.in_(["cross-sell", "complementary"])
         )
     )
-    rels = rels_result.scalars().all()
+    for rel in rels_result.scalars().all():
+        product = await _load_product(db, rel.related_product_id)
+        if product and product.stock > 0 and product.id not in seen:
+            seen.add(product.id)
+            item = _serialize_product(product, len(recommendations) + 1)
+            item["reason"] = rel.reason or "Frequently bought together with this product."
+            item["type"] = rel.relationship_type
+            recommendations.append(item)
 
-    recommendations = []
-    for rel in rels:
-        product_result = await db.execute(select(Product).where(Product.id == rel.related_product_id))
-        product = product_result.scalar_one_or_none()
-        if product and product.stock > 0:
-            recommendations.append({
-                "product_id": product.id,
-                "name": product.name,
-                "price": product.price,
-                "reason": rel.reason,
-                "type": rel.relationship_type
-            })
+    # Fallback: real compatible accessories from the catalog, matched by anchor type.
+    if not recommendations:
+        sub = (anchor.subcategory or anchor.category or "").lower()
+        if any(w in sub for w in ("phone", "tablet", "watch", "earbud", "headphone", "camera")):
+            compat = ("Cases", "Screen Guards", "Cables", "Chargers", "Car Chargers")
+        elif any(w in sub for w in ("laptop", "monitor", "keyboard", "printer")):
+            compat = ("Laptop Stands", "Cooling Pads", "Hubs", "Backpacks", "Cables")
+        elif any(w in sub for w in ("tv", "speaker", "projector", "router")):
+            compat = ("Cables", "Hubs", "Extension Boards", "Adapters", "Power Banks")
+        else:
+            compat = ("Cables", "Chargers", "Hubs", "Adapters", "Power Banks")
+        accessories = await db.execute(
+            select(Product).where(
+                Product.subcategory.in_(compat),
+                Product.stock > 0,
+                Product.price <= max(anchor.price, 1) * 1.5,
+                Product.id != anchor.id,
+            ).order_by(Product.price.asc()).limit(4)
+        )
+        for product in accessories.scalars().all():
+            if product.id in seen:
+                continue
+            seen.add(product.id)
+            item = _serialize_product(product, len(recommendations) + 1)
+            item["reason"] = f"Compatible accessory for {anchor.name} — commonly bought together."
+            item["type"] = "cross-sell"
+            recommendations.append(item)
 
-    return json.dumps({"recommendations": recommendations, "count": len(recommendations)})
+    message = f"Here are {len(recommendations)} accessory/companion item(s) for {anchor.name}." if recommendations else \
+        f"No companion items are currently available for {anchor.name}."
+
+    return json.dumps({"products": recommendations, "recommendations": recommendations,
+                       "count": len(recommendations), "message": message})
+
+
+async def _get_cheaper_alternatives(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:
+    """Find cheaper alternatives to the product in context (same range, lower price)."""
+    product_id, error = _resolve_context_product(arguments, session_data)
+    if error:
+        return json.dumps({"error": error})
+
+    anchor = await _load_product(db, product_id)
+    if not anchor:
+        return json.dumps({"error": "Product not found"})
+
+    alternatives = []
+    seen = {product_id}
+    cheaper = await db.execute(
+        select(Product).where(
+            Product.stock > 0,
+            Product.price < anchor.price,
+            Product.id != anchor.id,
+            Product.subcategory == anchor.subcategory,
+        ).order_by(Product.price.desc()).limit(5)
+    )
+    for product in cheaper.scalars().all():
+        if product.id in seen:
+            continue
+        seen.add(product.id)
+        savings = anchor.price - product.price
+        item = _serialize_product(product, len(alternatives) + 1)
+        item["reason"] = (
+            f"Same range as {anchor.name} but ₹{savings:,.0f} cheaper "
+            f"(₹{product.price:,.0f} vs ₹{anchor.price:,.0f})."
+        )
+        item["type"] = "cheaper_alternative"
+        alternatives.append(item)
+
+    message = f"Here are {len(alternatives)} cheaper alternative(s) to {anchor.name}." if alternatives else \
+        f"No cheaper alternative is currently available in the same range as {anchor.name}."
+
+    return json.dumps({"products": alternatives, "recommendations": alternatives,
+                       "count": len(alternatives), "message": message})
 
 
 async def _add_to_cart(arguments: Dict, db: AsyncSession, session_id: str, session_data: Dict) -> str:

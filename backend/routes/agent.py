@@ -4,11 +4,13 @@ Rule-based intent detection with deterministic product search and cart actions.
 No external AI API - uses built-in pattern matching and database queries.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import get_db
 from services.ai_provider import detect_intent, generate_response, get_tool_definitions, QUICK_ACTIONS
 from services.agent_tools import execute_tool, get_session_data
+from models.models import Product, ProductRelationship
 from pydantic import BaseModel
 from typing import List, Optional, Any
 import json
@@ -86,11 +88,12 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 continue
 
             # Extract data from tool results
-            if tool_name in ("search_products", "get_bestsellers") and "products" in result_data:
+            if tool_name in ("search_products", "get_bestsellers", "recommend_cross_sell",
+                             "recommend_upsell", "get_cheaper_alternatives") and "products" in result_data:
                 products_found = result_data["products"]
             if result_data.get("cart") and cart_info is None:
                 cart_info = result_data["cart"]
-            if tool_name in ("recommend_cross_sell", "recommend_upsell") and "recommendations" in result_data:
+            if tool_name in ("recommend_cross_sell", "recommend_upsell", "get_cheaper_alternatives") and "recommendations" in result_data:
                 recommendations = result_data["recommendations"]
             if not response_text and result_data.get("message"):
                 response_text = result_data["message"]
@@ -304,3 +307,179 @@ async def approve_payment_endpoint(approval_id: str, db: AsyncSession = Depends(
     await db.commit()
 
     return {"status": "approved", "order_id": approval.order_id}
+
+
+# ════════════════════════════════════════════════════════════════════
+# Agent-Readable Catalog (machine-to-machine API for AI buyers)
+# No LLM required to call these endpoints - clean JSON responses.
+# ════════════════════════════════════════════════════════════════════
+
+def _agent_product_dict(p: Product) -> dict:
+    """Stable, agent-friendly product representation (used by all endpoints)."""
+    discount = 0.0
+    if p.previous_price and p.price and p.previous_price > p.price:
+        discount = round((p.previous_price - p.price) / p.previous_price * 100, 1)
+    return {
+        "id": p.id,
+        "sku": p.sku or "",
+        "name": p.name,
+        "description": p.description or "",
+        "brand": p.brand or "",
+        "category": p.category,
+        "subcategory": p.subcategory or "",
+        "price": float(p.price or 0),
+        "currency": p.currency or "INR",
+        "previous_price": float(p.previous_price or 0) or None,
+        "discount": discount,
+        "stock": int(p.stock or 0),
+        "availability": bool(p.stock and p.stock > 0 and p.is_active),
+        "rating": float(p.rating or 0),
+        "image_url": p.image_url or "",
+        "product_url": f"/product?id={p.id}",
+        "tags": (p.tags or "").split(",") if p.tags else [],
+        "sales": int(p.sales or 0),
+        "revenue": float(p.revenue or 0),
+    }
+
+
+@router.get("/catalog")
+async def agent_catalog(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    in_stock: Optional[bool] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    sort_by: str = "revenue",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """GET /api/agent/catalog — paginated, filterable machine-readable catalog."""
+    query = select(Product)
+    count_query = select(func.count(Product.id))
+    conditions = []
+    if category:
+        conditions.append(or_(Product.category.ilike(f"%{category}%"), Product.subcategory.ilike(f"%{category}%")))
+    if in_stock is True:
+        conditions.append(Product.stock > 0)
+    elif in_stock is False:
+        conditions.append(Product.stock <= 0)
+    if min_price is not None:
+        conditions.append(Product.price >= min_price)
+    if max_price is not None:
+        conditions.append(Product.price <= max_price)
+    if q:
+        term = f"%{q}%"
+        conditions.append(or_(
+            Product.name.ilike(term), Product.description.ilike(term),
+            Product.brand.ilike(term), Product.category.ilike(term),
+            Product.subcategory.ilike(term), Product.sku.ilike(term),
+        ))
+    if conditions:
+        query = query.where(and_(*conditions))
+        count_query = count_query.where(and_(*conditions))
+
+    total = (await db.execute(count_query)).scalar() or 0
+    sort_col = getattr(Product, sort_by, Product.revenue)
+    query = query.order_by(sort_col.desc()).offset((page - 1) * page_size).limit(page_size)
+    products = (await db.execute(query)).scalars().all()
+
+    return {
+        "products": [_agent_product_dict(p) for p in products],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size if total else 0,
+        "schema": "https://ai-growth-and-commerce-agent.onrender.com/api/agent/catalog",
+    }
+
+
+@router.get("/products/search")
+async def agent_product_search(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    in_stock: bool = True,
+    sort_by: str = "revenue",
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """GET /api/agent/products/search — search endpoint for AI buyers."""
+    query = select(Product)
+    conditions = []
+    if category:
+        conditions.append(or_(Product.category.ilike(f"%{category}%"), Product.subcategory.ilike(f"%{category}%")))
+    if in_stock:
+        conditions.append(Product.stock > 0)
+    if min_price is not None:
+        conditions.append(Product.price >= min_price)
+    if max_price is not None:
+        conditions.append(Product.price <= max_price)
+    if q:
+        term = f"%{q}%"
+        conditions.append(or_(
+            Product.name.ilike(term), Product.description.ilike(term),
+            Product.brand.ilike(term), Product.category.ilike(term),
+            Product.subcategory.ilike(term), Product.sku.ilike(term),
+        ))
+    if conditions:
+        query = query.where(and_(*conditions))
+    sort_col = getattr(Product, sort_by, Product.revenue)
+    query = query.order_by(sort_col.desc()).limit(limit)
+    products = (await db.execute(query)).scalars().all()
+    return {"query": q, "count": len(products), "products": [_agent_product_dict(p) for p in products]}
+
+
+@router.get("/products/{product_id}")
+async def agent_product_detail(product_id: str, db: AsyncSession = Depends(get_db)):
+    """GET /api/agent/products/{id} — full product detail for an AI buyer."""
+    product = (await db.execute(select(Product).where(Product.id == product_id))).scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return _agent_product_dict(product)
+
+
+@router.get("/products/{product_id}/recommendations")
+async def agent_product_recommendations(product_id: str, db: AsyncSession = Depends(get_db)):
+    """GET /api/agent/products/{id}/recommendations — related/compatible products."""
+    product = (await db.execute(select(Product).where(Product.id == product_id))).scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    rels = (await db.execute(
+        select(ProductRelationship).where(ProductRelationship.product_id == product_id)
+    )).scalars().all()
+
+    related, recommendations = [], []
+    seen = set()
+    for rel in rels:
+        rel_p = (await db.execute(select(Product).where(Product.id == rel.related_product_id))).scalar_one_or_none()
+        if rel_p and rel_p.id not in seen and rel_p.stock > 0:
+            seen.add(rel_p.id)
+            entry = _agent_product_dict(rel_p)
+            entry["relationship"] = rel.relationship_type
+            entry["reason"] = rel.reason or ""
+            recommendations.append(entry)
+            if rel.relationship_type in ("cross-sell", "complementary"):
+                related.append(entry)
+
+    # Deterministic fallback: same-category compatible items (accessories with the
+    # anchor's own subcategory) when no explicit relationships exist.
+    if not recommendations:
+        fallback = (await db.execute(
+            select(Product).where(
+                Product.category == product.category,
+                Product.id != product.id,
+                Product.stock > 0,
+                Product.is_active.isnot(False),
+            ).order_by(Product.revenue.desc()).limit(5)
+        )).scalars().all()
+        for rel_p in fallback:
+            entry = _agent_product_dict(rel_p)
+            entry["relationship"] = "cross-sell"
+            entry["reason"] = f"Customers who viewed {product.name} also viewed this item."
+            recommendations.append(entry)
+            related.append(entry)
+
+    return {"product_id": product_id, "count": len(recommendations), "recommendations": recommendations}

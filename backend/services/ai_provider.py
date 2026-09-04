@@ -85,19 +85,24 @@ INTENT_PATTERNS = [
         r"\b(help|what\s*can\s*you|how\s*do|what\s*do\s*you|capabilities|features)\b"
     ]},
 
-    # Cart actions (check before product search since "add to cart" has "cart")
-    {"intent": "show_cart", "patterns": [
-        r"\b(show|view|open|see|what('s|\s+is|s)\s+in)\s+(my\s+)?cart\b",
-        r"\b(my\s+cart|cart\s+contents|cart\s+total|my\s+order)\b",
-        r"\b(how\s+much\s+(is\s+)?(my\s+)?cart|bill|total)\b"
-    ]},
+    # Cart actions (checked BEFORE the generic show_cart so "add … to my cart"
+    # is never mistaken for a cart view)
     {"intent": "add_to_cart", "patterns": [
         r"\b(add|put|place)\s+(this|it|product|\d+\s*(st|nd|rd|th)?)?\s*(to|in|into)\s+(my\s+)?cart\b",
         r"\b(add|put|place)\s+(the\s+)?(first|second|third|fourth|fifth|last|\d+\s*(st|nd|rd|th)?)(\s+one)?(\s+item)?\s*(to|in|into)\s+(my\s+)?cart\b",
         r"\b(add|put|place)\s+(the\s+)?(first|second|third|fourth|fifth|last|\d+\s*(st|nd|rd|th)?)(\s+one)?(\s+item)?\s*(please)?\b",
         r"\b(buy|purchase|get)\s+(this|it|the\s+first\s+one)\b",
         r"\b(add)\s+(\d+)\s*(x|pieces?|units?)?\s*(to|in)?\s*(my\s+)?cart\b",
-        r"\b(add)\s+(\d+)\b"
+        r"\b(add)\s+(\d+)\b",
+        # "add two of them / of those / of these" → default position 1
+        r"\b(add|put|place)\s+(the\s+)?(one|two|three|four|five|six|seven|eight|nine|ten)\s+(of|more\s+of)\s+(them|those|these)\b",
+        r"\b(add|put|place)\s+(a\s+)?(one|two|three|four|five|six|seven|eight|nine|ten)\s+(more\s+)?(of\s+)?(them|those|these)?\s*(to|in|into)?\s*(my\s+)?cart\b",
+    ]},
+    {"intent": "show_cart", "patterns": [
+        r"\b(show|view|open|see|what('s|\s+is|s)\s+in)\s+(my\s+)?cart\b",
+        r"\b(what('s|\s+is)\s+(my\s+)?cart\s+total|cart\s+total)\b",
+        r"\b(my\s+cart|cart\s+contents|my\s+order)\b",
+        r"\b(how\s+much\s+(is\s+)?(my\s+)?cart|bill|total)\b"
     ]},
     {"intent": "checkout", "patterns": [
         r"\b(checkout|check\s*out)\b",
@@ -114,6 +119,22 @@ INTENT_PATTERNS = [
     ]},
     {"intent": "clear_cart", "patterns": [
         r"\b(clear|empty|reset)\s+(my\s+)?cart\b"
+    ]},
+
+    # Accessories / compatible items for a product (cross-sell)
+    {"intent": "accessories", "patterns": [
+        r"\b(what\s+)?(accessor(?:ies|y)|compatible\s+items|add-?ons|companion)\s+(go(?:es|ing)?|for|with|to|that\s+go)\b",
+        r"\b(accessor(?:ies|y)|extras|add-?ons|bundle|combo)\s+(for|with|to|that\s+go\s+with)\s+(this|that|it|the\s+product|\d+\s*(st|nd|rd|th)?)\b",
+        r"\b(recommend|suggest|show|find)\s+(me\s+)?(some\s+)?accessor(?:ies|y)s?\b",
+        r"\b(what|which)\s+(accessor|add-?ons|extras)\b"
+    ]},
+
+    # Cheaper / budget alternatives to the currently viewed product
+    {"intent": "cheaper_alternative", "patterns": [
+        r"\b(cheaper|cheapest|less\s+expensive|more\s+affordable|budget\s+alternative|cheap\s+alternative)s?\b",
+        r"\b(alternative|alternatives|option|options|similar)\s+(that\s+are\s+)?(cheaper|less\s+expensive|under|below)\b",
+        r"\b(show|find|see)\s+(me\s+)?(a\s+)?(cheaper|cheapest|cheap)\s+(one|option|alternative|version)?s?\b",
+        r"\b(lower\s+(priced|price)|price\s+under|under\s+this\s+price)\b"
     ]},
 
     # Order tracking
@@ -312,10 +333,34 @@ def detect_intent(text: str) -> Dict[str, Any]:
     if rupee_match and "max_price" not in entities and "min_price" not in entities:
         entities["max_price"] = float(rupee_match.group(1).replace(",", ""))
 
-    # Extract quantity
+    # Extract quantity (digits, or word numbers like "two of them")
     qty_match = re.search(r'\b(\d+)\s*(?:pieces?|units?|qty|quantity|x)\b', text_lower)
     if qty_match:
         entities["quantity"] = int(qty_match.group(1))
+
+    word_numbers = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    }
+    # "add two of them" / "add 3 of them" / "two of those"
+    if "quantity" not in entities:
+        wq = re.search(
+            r'\b(add|put|place|buy|purchase|get)\s+(?:the\s+|a\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)'
+            r'\s+(?:more\s+)?(?:of\s+)?(them|those|these|items?|units?)\b',
+            text_lower,
+        )
+        if wq:
+            q = wq.group(2)
+            entities["quantity"] = int(q) if q.isdigit() else word_numbers.get(q, 1)
+            if "position" not in entities:
+                entities["position"] = 1  # refers to the last shown results by default
+
+    # Bare "add two" / "add 3" quantity when talking about the current results
+    if "quantity" not in entities and re.search(r'\b(add|put|place|buy)\s+(one|two|three|four|five|six|seven|eight|nine|ten)\b', text_lower):
+        mq = re.search(r'\b(add|put|place|buy)\s+(one|two|three|four|five|six|seven|eight|nine|ten)\b', text_lower)
+        entities["quantity"] = word_numbers.get(mq.group(2), 1)
+        if "position" not in entities:
+            entities["position"] = 1
 
     # Extract position (1st, 2nd, etc.)
     pos_match = re.search(r'\b(\d+)(?:st|nd|rd|th)\b', text_lower)
@@ -454,6 +499,26 @@ async def generate_response(intent_result: Dict, tools_fn, db=None, session_id: 
             "quick_actions": [
                 {"label": "Show Cart", "message": "Show my cart"},
             ],
+        }
+
+    if intent == "accessories":
+        # "What accessories go with the second one?" → cross-sell for the product in context
+        return {
+            "content": None,
+            "tool_calls": [{"name": "recommend_cross_sell", "arguments": {
+                "product_id": entities.get("product_id"),
+                "product_position": entities.get("position"),
+            }}],
+        }
+
+    if intent == "cheaper_alternative":
+        # "Show me cheaper alternatives" → cheaper options for the product in context
+        return {
+            "content": None,
+            "tool_calls": [{"name": "get_cheaper_alternatives", "arguments": {
+                "product_id": entities.get("product_id"),
+                "product_position": entities.get("position"),
+            }}],
         }
 
     if intent == "checkout":

@@ -337,7 +337,8 @@ ACCESSORIES_PRODUCTS = [
 
 
 # ──────────────────────────────────────────────────────────
-# Generator functions to scale up to 10,000+ products
+# Generator functions to scale up to a realistic catalog
+# Catalog target: ~4,700 products (spec maximum: 5,000)
 # ──────────────────────────────────────────────────────────
 
 def generate_variant_products(base_products, target_multiplier=5):
@@ -357,20 +358,20 @@ def generate_variant_products(base_products, target_multiplier=5):
 
 
 def generate_scaled_products():
-    """Generate 10,000+ products by combining base + variants + generated."""
+    """Generate ~4,700 products by combining base + variants + generated (spec: max 5,000)."""
     all_products = []
 
-    # Electronics: ~150 base → scale to ~3000
-    all_products.extend(generate_variant_products(ELECTRONICS_PRODUCTS, 20))
+    # Electronics: ~195 base → scale to ~1,950 (covers phones/laptops/TVs/cameras/audio/etc.)
+    all_products.extend(generate_variant_products(ELECTRONICS_PRODUCTS, 10))
 
-    # Clothing: ~30 base → scale to ~2000
-    all_products.extend(generate_variant_products(CLOTHING_PRODUCTS, 65))
+    # Clothing: ~30 base → scale to ~600
+    all_products.extend(generate_variant_products(CLOTHING_PRODUCTS, 20))
 
-    # Footwear: ~20 base → scale to ~1500
-    all_products.extend(generate_variant_products(FOOTWEAR_PRODUCTS, 75))
+    # Footwear: ~20 base → scale to ~400
+    all_products.extend(generate_variant_products(FOOTWEAR_PRODUCTS, 20))
 
-    # Accessories: ~15 base → scale to ~1000
-    all_products.extend(generate_variant_products(ACCESSORIES_PRODUCTS, 65))
+    # Accessories: ~15 base → scale to ~300
+    all_products.extend(generate_variant_products(ACCESSORIES_PRODUCTS, 20))
 
     # Add generated commodity products
     categories_data = [
@@ -403,7 +404,7 @@ def generate_scaled_products():
 
     for cat, sub, brands, price_range, min_stock, max_stock in categories_data:
         for brand in brands:
-            for i in range(50):
+            for i in range(12):
                 name = f"{brand} {sub} Premium {i+1}"
                 desc = f"High quality {sub.lower()} from {brand}"
                 price = round(random.uniform(price_range[0], price_range[1]), 0)
@@ -413,7 +414,8 @@ def generate_scaled_products():
     return all_products
 
 
-ALL_PRODUCTS = generate_scaled_products()
+# Hard safety cap per project spec: maximum 5,000 products
+ALL_PRODUCTS = generate_scaled_products()[:5000]
 
 # ──────────────────────────────────────────────────────────
 # Seed function

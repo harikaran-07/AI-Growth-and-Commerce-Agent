@@ -68,6 +68,13 @@ async def lifespan(app: FastAPI):
             except Exception as ie:
                 logger.error(f"Image fix migration failed: {ie}")
 
+            # Keep catalog within spec maximum (5,000 products) on legacy over-seeded DBs
+            try:
+                from scripts.trim_catalog import trim_catalog
+                await trim_catalog()
+            except Exception as te:
+                logger.error(f"Catalog trim migration failed: {te}")
+
     except Exception as e:
         logger.error(f"Startup check failed: {e}")
         import traceback
